@@ -1,0 +1,29 @@
+# Gradle & Android
+.gradle/
+build/
+app/build/
+*.apk
+*.aab
+local.properties
+.idea/
+*.iml
+.DS_Store
+*.hprof
+
+# Python
+__pycache__/
+*.py[cod]
+*.class
+.pytest_cache/
+env/
+venv/
+.venv/
+
+# Large neural weights (bundled inside compiled APK)
+*.onnx
+*.onnx.data
+*.data
+*.bin
+*.pt
+*.tflite
+*.safetensors
