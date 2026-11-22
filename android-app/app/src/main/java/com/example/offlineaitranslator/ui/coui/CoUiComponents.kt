@@ -94,6 +94,14 @@ fun CoUiScaffold(
     val collapsed by remember(scrollState) {
         derivedStateOf { scrollState != null && scrollState.value > 96 }
     }
+    // COUI-17 style page-grow: the page shrinks slightly as the list scrolls up and grows back
+    // on scroll down — a fluid "pop-up" effect on top of the collapsing top bar.
+    val pageScale by remember(scrollState) {
+        derivedStateOf {
+            val scrolled = (scrollState?.value ?: 0f).coerceAtLeast(0f)
+            1f - (scrolled / 400f).coerceIn(0f, 0.07f)
+        }
+    }
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -107,7 +115,13 @@ fun CoUiScaffold(
             collapsed = collapsed,
             actions = actions,
         )
-        Column(modifier = Modifier.fillMaxWidth().weight(1f), content = content)
+        Column(
+            modifier = Modifier.fillMaxWidth().weight(1f).graphicsLayer {
+                scaleX = pageScale
+                scaleY = pageScale
+            },
+            content = content,
+        )
     }
 }
 
