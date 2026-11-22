@@ -31,26 +31,35 @@ class OfflineOcrEngine {
         TextRecognition.getClient(DevanagariTextRecognizerOptions.Builder().build())
     }
 
-    /** Runs real on-device OCR on a bitmap; returns "" when no readable text is found. */
-    suspend fun recognize(bitmap: Bitmap): String = withContext(Dispatchers.IO) {
-        val image = InputImage.fromBitmap(bitmap, 0)
-        val latin = runCatching { Tasks.await(latinRecognizer.process(image)).text }.getOrDefault("")
-        val devanagari = runCatching { Tasks.await(devanagariRecognizer.process(image)).text }.getOrDefault("")
-        listOf(latin, devanagari)
-            .map { it.trim() }
-            .filter { it.isNotEmpty() }
-            .distinct()
-            .joinToString("\n")
-    }
+    /**
+     * Runs real on-device OCR on a bitmap; returns "" when no readable text is found.
+     * When [language] is a Devanagari script, only the bundled Devanagari recognizer runs (the Latin
+     * recognizer ignores it and vice versa) — matching the language mode the user selected.
+     */
+    suspend fun recognize(bitmap: Bitmap, language: SupportedLanguage = SupportedLanguage.ENGLISH): String =
+        withContext(Dispatchers.IO) {
+            val image = InputImage.fromBitmap(bitmap, 0)
+            val devanagari = isDevanagari(language)
+            val text = runCatching {
+                Tasks.await((if (devanagari) devanagariRecognizer else latinRecognizer).process(image)).text
+            }.getOrDefault("")
+            if (devanagari) listOf(text).map { it.trim() }.filter { it.isNotEmpty() }.joinToString("\n")
+            else listOf(text).map { it.trim() }.filter { it.isNotEmpty() }.joinToString("\n")
+        }
+
+    /** Devanagari scripts supported by the bundled ML Kit Devanagari recognizer. */
+    private fun isDevanagari(language: SupportedLanguage): Boolean = language.code.startsWith("devanagari") ||
+        language.code in listOf("as", "mni", "sa", "brx", "doi", "kok", "mai", "sat", "sd")
 
     /** Decodes a gallery Uri (downsampled) and runs real bundled OCR on it. */
-    suspend fun processOcrImage(uri: Uri, context: Context): String = withContext(Dispatchers.IO) {
-        val stream = context.contentResolver.openInputStream(uri)
-            ?: return@withContext ""
-        val bitmap = stream.use { BitmapFactory.decodeStream(it) }
-            ?: return@withContext ""
-        recognize(bitmap)
-    }
+    suspend fun processOcrImage(uri: Uri, context: Context, language: SupportedLanguage = SupportedLanguage.ENGLISH): String =
+        withContext(Dispatchers.IO) {
+            val stream = context.contentResolver.openInputStream(uri)
+                ?: return@withContext ""
+            val bitmap = stream.use { BitmapFactory.decodeStream(it) }
+                ?: return@withContext ""
+            recognize(bitmap, language)
+        }
 
     companion object {
         val SAMPLES: List<OcrSample> = listOf(
