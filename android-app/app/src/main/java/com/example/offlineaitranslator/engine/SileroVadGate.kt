@@ -51,9 +51,12 @@ class SileroVadGate(private val modelPath: String) : AutoCloseable {
         if (samples.isEmpty()) return FloatArray(0)
 
         // ---- Stage 1: RMS energy gate (20 ms frames) ----
+        // Keep the ORIGINAL contiguous waveform between the first and last voiced frame. Concatenating
+        // only above-threshold frames removes the natural pauses inside words and hurts Whisper.
         val frameSize = maxOf(64, sampleRate / 50)
-        val energyGated = mutableListOf<Float>()
         var voicedFrames = 0
+        var firstVoiced = -1
+        var lastVoiced = -1
         var offset = 0
         while (offset + frameSize <= samples.size) {
             var energy = 0.0
@@ -64,15 +67,23 @@ class SileroVadGate(private val modelPath: String) : AutoCloseable {
             val rms = sqrt(energy / frameSize)
             if (rms >= ENERGY_THRESHOLD) {
                 voicedFrames++
-                for (i in offset until offset + frameSize) energyGated.add(samples[i])
+                if (firstVoiced < 0) firstVoiced = offset
+                lastVoiced = offset + frameSize
             }
             offset += frameSize
         }
-        if (voicedFrames == 0 || energyGated.size.toFloat() / sampleRate < MIN_VOICED_SECONDS) {
+        if (voicedFrames == 0 || lastVoiced < 0) {
             AppLog.i("VadGate", "Stage 1 rejected audio: voicedFrames=$voicedFrames")
             return FloatArray(0)
         }
-        val stage1 = energyGated.toFloatArray()
+        val pad = maxOf(64, sampleRate / 20)
+        val start = maxOf(0, firstVoiced - pad)
+        val end = minOf(samples.size, lastVoiced + pad)
+        if ((end - start).toFloat() / sampleRate < MIN_VOICED_SECONDS) {
+            AppLog.i("VadGate", "Stage 1 rejected audio: voiced region too short")
+            return FloatArray(0)
+        }
+        val stage1 = samples.copyOfRange(start, end)
 
         // ---- Stage 2: Silero VAD ----
         val engine = vad

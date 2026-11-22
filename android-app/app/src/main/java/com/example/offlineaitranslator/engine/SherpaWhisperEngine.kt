@@ -121,8 +121,11 @@ class SherpaWhisperEngine(
             val latency = System.currentTimeMillis() - t0
 
             val cleaned = cleanSpeechText(rawText)
+            // Use what Whisper actually heard. Fuzzy "snapping" to canned phrases was rewriting
+            // unrelated utterances into one of a few sample sentences and was recognized as bad ASR.
+            @Suppress("UNUSED_PARAMETER")
             val finalText = if (isValidSpeech(cleaned)) {
-                snapToKnownPhrase(normalizeLanguageSpeech(cleaned, language), knownPhrases)
+                normalizeLanguageSpeech(cleaned, language)
             } else {
                 ""
             }
