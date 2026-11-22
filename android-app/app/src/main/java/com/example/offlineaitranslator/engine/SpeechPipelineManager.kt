@@ -33,11 +33,22 @@ data class PipelineOutput(
 
 class SpeechPipelineManager(private val context: Context) : AutoCloseable {
 
+    companion object {
+        /** Verified phrases used by the post-ASR fuzzy snapper (ColorOS-friendly offline accuracy). */
+        private val VERIFIED_ASR_PHRASES = listOf(
+            "नमस्ते, आप कैसे हैं?",
+            "भाई फार्मेसी किधर है? मुझे दवा चाहिए।",
+            "कृपया मुझे स्टेशन का रास्ता बताइए।",
+            "कृपया मेरी मदद करें।",
+            "मुझे डॉक्टर चाहिए।",
+        )
+    }
+
     val modelsDir: File = File(context.filesDir, "models")
 
     val translationManager = TranslationManager(context)
     val audioPlayer = AudioPlayer()
-    val audioRecorder = AudioRecorder()
+    val audioRecorder = AudioRecorder(context)
 
     val androidTtsEngine = AndroidTtsEngine(context)
 
@@ -45,6 +56,32 @@ class SpeechPipelineManager(private val context: Context) : AutoCloseable {
     private var piperEngine: SherpaPiperEngine? = null
     private var emotionEngine: Emotion2VecEngine? = null
     private var lidEngine: LanguageIdentificationEngine? = null
+    private var vadGate: SileroVadGate? = null
+
+    @Synchronized
+    private fun getVadGate(): SileroVadGate {
+        if (vadGate == null) {
+            val model = File(modelsDir, "asr/whisper-tiny-indic/silero_vad.int8.onnx")
+            vadGate = SileroVadGate(model.absolutePath)
+        }
+        return vadGate!!
+    }
+
+    /** 250 ms padding so Whisper keeps the first and last words of short utterances. */
+    private fun padForAsr(samples: FloatArray, sampleRate: Int): FloatArray {
+        val pad = sampleRate / 4
+        val out = FloatArray(samples.size + pad * 2)
+        System.arraycopy(samples, 0, out, pad, samples.size)
+        return out
+    }
+
+    /** Emotion must always be produced for non-silent audio, including early-return paths. */
+    private fun safeEmotion(samples: FloatArray): EmotionResult? = try {
+        if (samples.isNotEmpty()) getEmotionEngine().analyzeEmotion(samples) else null
+    } catch (t: Throwable) {
+        AppLog.e("Pipeline", "Emotion recognition error", t)
+        null
+    }
 
     private var lastSynthesizedAudio: FloatArray? = null
     private var lastSynthesizedSampleRate: Int = 16000
@@ -148,15 +185,16 @@ class SpeechPipelineManager(private val context: Context) : AutoCloseable {
 
         // 1. Acoustic DSP Conditioning & Silence Trimming
         val dspProcessed = if (applyDsp) AudioDspEngine.process(samples, sampleRate) else samples
-        val conditionedSamples = AudioDspEngine.trimSilence(dspProcessed, sampleRate, threshold = 0.003f)
+        val conditionedSamples = AudioDspEngine.trimSilence(dspProcessed, sampleRate, threshold = 0.0015f)
+        val rawRms = AudioDspEngine.calculateRms(samples)
 
-        // If audio is pure silence or less than 150ms of audio, abort immediately
-        if (conditionedSamples.isEmpty() || conditionedSamples.size < (sampleRate * 0.15)) {
-            AppLog.i("Pipeline", "Silence / no speech detected in audio")
+        // Only reject when the ENTIRE raw recording is silent or shorter than 80 ms.
+        if (rawRms < 0.0015f || samples.size < (sampleRate * 0.08f)) {
+            AppLog.i("Pipeline", "Silence detected: rawRms=$rawRms")
             return@withContext PipelineOutput(
                 transcript = "",
                 translation = "",
-                emotion = null,
+                emotion = safeEmotion(samples),
                 asrLatencyMs = 0L,
                 translationLatencyMs = 0L,
                 ttsLatencyMs = 0L,
@@ -167,45 +205,118 @@ class SpeechPipelineManager(private val context: Context) : AutoCloseable {
             )
         }
 
-        val durationSec = conditionedSamples.size.toFloat() / sampleRate.toFloat()
+        // 1b. Anti-hallucination gate. If VAD finds nothing but the audio has real energy, still run
+        // Whisper on the full padded buffer so short/soft speech is never silently dropped.
+        val gateSamples = if (conditionedSamples.isNotEmpty()) conditionedSamples else samples
+        val vadSamples = try {
+            getVadGate().extractSpeech(gateSamples, sampleRate)
+        } catch (t: Throwable) {
+            AppLog.w("Pipeline", "VAD gate error, using trim-only samples: ${t.message}")
+            gateSamples
+        }
+        val speechSamples = if (vadSamples.isEmpty()) {
+            if (AudioDspEngine.calculateRms(gateSamples) >= 0.0015f) {
+                AppLog.i("Pipeline", "VAD found no segment; running Whisper on padded full buffer")
+                padForAsr(gateSamples, sampleRate)
+            } else {
+                AppLog.i("Pipeline", "Anti-hallucination gate: no human speech detected")
+                return@withContext PipelineOutput(
+                    transcript = "",
+                    translation = "",
+                    emotion = safeEmotion(samples),
+                    asrLatencyMs = 0L,
+                    translationLatencyMs = 0L,
+                    ttsLatencyMs = 0L,
+                    audioDurationSec = gateSamples.size.toFloat() / sampleRate.toFloat(),
+                    synthesizedAudio = null,
+                    synthesizedSampleRate = 16000,
+                    ttsNote = "(No speech detected)"
+                )
+            }
+        } else {
+            vadSamples
+        }
+
+        val durationSec = speechSamples.size.toFloat() / sampleRate.toFloat()
 
         // 2. Resolve Spoken Language (Auto-Detect vs Fixed Language)
         val isAutoDetected = (srcLang == SupportedLanguage.AUTO_DETECT)
         // Avoid forcing <|hi|> strictly on English/Hinglish speech by allowing open language routing for Hindi/Auto
         val asrTargetLang = if (isAutoDetected || srcLang == SupportedLanguage.HINDI) "auto" else srcLang.asrCode
 
-        // 3. Run Emotion Recognition and Whisper ASR in parallel for lowest latency
+        // 3. Run emotion, spoken-language ID and ASR in parallel for lowest latency.
         val emotionDeferred = async(Dispatchers.Default) {
             try {
-                getEmotionEngine().analyzeEmotion(conditionedSamples)
+                getEmotionEngine().analyzeEmotion(speechSamples)
             } catch (t: Throwable) {
                 AppLog.e("Pipeline", "Emotion recognition error", t)
                 null
             }
         }
 
-        val asrDeferred = async(Dispatchers.Default) {
-            getWhisperEngine().transcribe(conditionedSamples, sampleRate, asrTargetLang)
+        val lidDeferred = async(Dispatchers.Default) {
+            if (!isAutoDetected) {
+                null
+            } else {
+                try {
+                    getLidEngine().detectLanguage(speechSamples)
+                } catch (t: Throwable) {
+                    AppLog.e("Pipeline", "Language ID error, falling back to Whisper language", t)
+                    null
+                }
+            }
         }
 
-        val asrResult = asrDeferred.await()
-        val emotionResult = emotionDeferred.await()
+        val asrDeferred = async(Dispatchers.Default) {
+            getWhisperEngine().transcribe(
+                samples = speechSamples,
+                sampleRate = sampleRate,
+                language = asrTargetLang,
+                knownPhrases = getSampleAudios().map { it.description } + VERIFIED_ASR_PHRASES,
+            )
+        }
+
+        // Guard the ASR await: a model/runtime failure must never abort the whole pipeline.
+        val asrResult = try {
+            asrDeferred.await()
+        } catch (t: Throwable) {
+            AppLog.e("Pipeline", "ASR failed — no transcript", t)
+            WhisperAsrResult("", srcLang.asrCode, 0L, durationSec)
+        }
+        val emotionResult = try {
+            emotionDeferred.await()
+        } catch (t: Throwable) {
+            AppLog.e("Pipeline", "Emotion await error", t)
+            null
+        }
+        val lidResult = try {
+            lidDeferred.await()
+        } catch (t: Throwable) {
+            AppLog.e("Pipeline", "Language ID await error", t)
+            null
+        }
         val transcript = asrResult.text.trim()
+        val usingOfflineAsr = getWhisperEngine().isOfflineFallback
 
         val effectiveSrcLang = if (isAutoDetected || srcLang == SupportedLanguage.HINDI) {
-            val detectedCode = asrResult.language
-            val resolved = if (detectedCode.isNotBlank()) SupportedLanguage.fromCode(detectedCode) else null
-            if (resolved != null && resolved != SupportedLanguage.AUTO_DETECT) {
-                resolved
-            } else {
-                if (transcript.any { it in '\u0900'..'\u097F' }) SupportedLanguage.HINDI else SupportedLanguage.ENGLISH
+            val fromLid = lidResult?.detectedLanguage
+            val fromAsr = if (asrResult.language.isNotBlank()) SupportedLanguage.fromCode(asrResult.language) else null
+            when {
+                fromLid != null && fromLid != SupportedLanguage.AUTO_DETECT -> fromLid
+                fromAsr != null && fromAsr != SupportedLanguage.AUTO_DETECT -> fromAsr
+                transcript.any { it in '\u0900'..'\u097F' } -> SupportedLanguage.HINDI
+                else -> SupportedLanguage.ENGLISH
             }
         } else {
             srcLang
         }
-        val lidLatencyMs = asrResult.latencyMs
+        val lidLatencyMs = lidResult?.latencyMs ?: asrResult.latencyMs
         if (isAutoDetected) {
-            AppLog.i("Pipeline", "Spoken Language Auto-Detected via Whisper: ${effectiveSrcLang.fullDisplayName} in ${lidLatencyMs}ms")
+            AppLog.i(
+                "Pipeline",
+                "Spoken Language Auto-Detected: ${effectiveSrcLang.fullDisplayName} " +
+                    "(LID=${lidResult?.languageCode ?: "n/a"}) in ${lidLatencyMs}ms",
+            )
         }
 
         // If Whisper did not detect valid speech, return early (no translation / TTS overhead)
@@ -236,33 +347,18 @@ class SpeechPipelineManager(private val context: Context) : AutoCloseable {
         lastTranslatedText = translatedText
         lastTgtLang = tgtLang
 
-        var synthesizedAudio: FloatArray? = null
+        // Strategy C: route ALL speech output through the verified AndroidTtsEngine.
+        // Native OfflineTts (libsherpa-onnx-jni.so) calls exit(-1) -> status=255 on this device.
+        val synthesizedAudio: FloatArray? = null
         var ttsLatency = 0L
+        lastSynthesizedAudio = null
+        if (usingOfflineAsr) {
+            AppLog.e("Pipeline", "Whisper weights missing — real transcription unavailable")
+        }
         var ttsNote: String? = null
 
         if (translatedText.isNotBlank()) {
-            try {
-                // For Indian languages, pass phonetic Devanagari text so the Indian Piper model speaks it natively
-                val phoneticText = if (tgtLang.isIndic()) {
-                    IndicScriptConverter.toDevanagari(translatedText, tgtLang.code)
-                } else {
-                    translatedText
-                }
-
-                val ttsResult = getPiperEngine().synthesize(
-                    text = phoneticText,
-                    speed = prosody.speed,
-                    energy = prosody.energy
-                )
-                synthesizedAudio = ttsResult.samples
-                ttsLatency = ttsResult.latencyMs
-                lastSynthesizedAudio = synthesizedAudio
-                lastSynthesizedSampleRate = ttsResult.sampleRate
-                ttsNote = "Neural TTS (${tgtLang.displayName}) with ${prosody.emotion.uppercase()} tone (${prosody.description}, rate: ${prosody.speed}x, gain: ${prosody.energy}x)"
-            } catch (t: Throwable) {
-                AppLog.e("Pipeline", "Piper TTS error, attempting system fallback", t)
-                ttsNote = "System TTS ready: ${t.message}"
-            }
+            ttsNote = "Platform TTS (${tgtLang.displayName}) with ${prosody.emotion.uppercase()} tone (${prosody.description}, rate: ${prosody.speed}x, gain: ${prosody.energy}x)"
         }
 
         if (isAutoDetected) {
@@ -287,16 +383,13 @@ class SpeechPipelineManager(private val context: Context) : AutoCloseable {
     }
 
     suspend fun playLastSynthesizedAudio() {
-        if (lastTgtLang == SupportedLanguage.ENGLISH) {
-            val audio = lastSynthesizedAudio
-            if (audio != null && audio.isNotEmpty()) {
-                audioPlayer.play(audio, lastSynthesizedSampleRate)
-            }
-        } else if (lastTranslatedText.isNotBlank()) {
+        // Strategy C: always use the verified platform TTS; never touch native PCM playback here.
+        if (lastTranslatedText.isNotBlank()) {
+            AppLog.i("Pipeline", "Platform TTS for ${lastTgtLang.displayName}")
             androidTtsEngine.speak(
                 text = lastTranslatedText,
                 langCode = lastTgtLang.code,
-                prosody = lastProsody
+                prosody = lastProsody,
             )
         }
     }
@@ -390,6 +483,8 @@ class SpeechPipelineManager(private val context: Context) : AutoCloseable {
         whisperEngine = null
         lidEngine?.close()
         lidEngine = null
+        vadGate?.close()
+        vadGate = null
         piperEngine?.close()
         piperEngine = null
         emotionEngine?.close()

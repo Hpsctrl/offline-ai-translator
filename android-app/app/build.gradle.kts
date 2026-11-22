@@ -12,8 +12,9 @@ android {
         applicationId = "com.example.offlineaitranslator"
         minSdk = 26
         targetSdk = 36
-        versionCode = 7
-        versionName = "1.6"
+        // Version policy: started at 1.8; increment this pair with every delivered update.
+        versionCode = 10
+        versionName = "2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -89,6 +90,9 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.navigation3)
 
     implementation(libs.onnxruntime.android)
+    // Bundled, on-device text recognition (no network; INTERNET stripped in manifest).
+    implementation(libs.mlkit.text.recognition)
+    implementation(libs.mlkit.text.recognition.devanagari)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

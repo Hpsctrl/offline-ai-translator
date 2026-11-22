@@ -166,4 +166,45 @@ class TranslationManagerTest {
         val hits = (stats2["hits"] as Long)
         assertTrue("Cache hits should increase", hits > 0)
     }
+
+    @Test
+    fun testFullSentenceHasNoHalfEnglishMixingOrRepetition() = runBlocking {
+        // Deterministic path only: ONNX native JNI is unavailable on the desktop JVM.
+        val deterministic = TranslationManager(null, java.io.File("build/no-neural-models"))
+        val result = deterministic.translate(
+            "Please call a doctor immediately.",
+            SupportedLanguage.ENGLISH,
+            SupportedLanguage.HINDI,
+        )
+        val output = result.translatedText
+        assertTrue("Full sentence must translate to non-empty text", output.isNotBlank())
+        assertFalse(
+            "No source-English words may leak into the Hindi output: $output",
+            output.split("\\s+".toRegex()).any {
+                it.equals("please", true) || it.equals("call", true) || it.equals("doctor", true) || it.equals("immediately", true)
+            },
+        )
+        assertFalse("Output must not contain token repetition loops: $output", Regex("(\\b\\S+\\b)(?:\\s+\\1){2,}").containsMatchIn(output))
+        assertFalse("Output must not contain double spaces: $output", output.contains("  "))
+    }
+
+    @Test
+    fun testCommaAndNoCommaParity() = runBlocking {
+        val withComma = translationManager.translate(
+            "Hello, how are you?", SupportedLanguage.ENGLISH, SupportedLanguage.SPANISH,
+        ).translatedText
+        val withoutComma = translationManager.translate(
+            "Hello how are you", SupportedLanguage.ENGLISH, SupportedLanguage.SPANISH,
+        ).translatedText
+        assertEquals("Punctuation must not change the translation", withComma, withoutComma)
+    }
+
+    @Test
+    fun testZeroHalfEnglishLeakIntoHindi() = runBlocking {
+        val result = translationManager.translate(
+            "Please call a doctor immediately.", SupportedLanguage.ENGLISH, SupportedLanguage.HINDI,
+        ).translatedText
+        val latinRuns = Regex("[A-Za-z]{2,}").findAll(result).map { it.value }.toList()
+        assertTrue("Raw English must not leak into Hindi output: $result", latinRuns.isEmpty())
+    }
 }

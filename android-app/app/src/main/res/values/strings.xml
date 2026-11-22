@@ -1,3 +1,133 @@
 <resources>
     <string name="app_name">Local AI Translator</string>
+
+    <!-- COUI app shell -->
+    <string name="ui_app_title">AI Voice &amp; Text Translator</string>
+    <string name="ui_offline_subtitle">Offline Mode • 33 Languages</string>
+    <string name="ui_privacy_badge">100% Offline • Zero Network</string>
+    <string name="ui_version">v2.0</string>
+    <string name="ui_preparing_models">Preparing AI models</string>
+    <string name="ui_model_setup_error">Model setup error: %1$s</string>
+
+    <!-- Tabs -->
+    <string name="ui_tab_voice">Voice</string>
+    <string name="ui_tab_text">Text</string>
+    <string name="ui_tab_models">Models</string>
+    <string name="ui_tab_ocr">OCR</string>
+    <string name="ui_tab_sos">SOS</string>
+    <string name="ui_tab_history">History</string>
+
+    <!-- Voice tab -->
+    <string name="ui_voice_translation">Voice Translation</string>
+    <string name="ui_voice_hint">Tap the microphone to speak or choose a sample</string>
+    <string name="ui_grant_mic">Grant Microphone Access</string>
+    <string name="ui_choose_audio">Choose Audio File</string>
+    <string name="ui_audio_formats">WAV, MP3 and M4A are supported</string>
+    <string name="ui_sample_audio">Or test with sample audio</string>
+    <string name="ui_play_sample">Play %1$s</string>
+    <string name="ui_translating_speech">Translating speech…</string>
+    <string name="ui_generating_local">Generating translation locally</string>
+    <string name="ui_recognized_output">Recognized Output</string>
+    <string name="ui_speech_input">Speech Input (%1$s):</string>
+    <string name="ui_no_speech">(No speech detected)</string>
+    <!-- Localized display copy for the ViewModel's fixed no-speech placeholders. -->
+    <string name="ui_please_speak_clearly">(Please speak clearly into the microphone)</string>
+    <!-- Sentinels match the ViewModel literals exactly and stay identical in every locale. -->
+    <string name="ui_no_speech_sentinel">(No speech detected)</string>
+    <string name="ui_speak_clearly_sentinel">(Please speak clearly into the microphone)</string>
+    <string name="ui_audio_duration">Audio duration: %1$s s</string>
+    <string name="ui_translation_label">Translation (%1$s):</string>
+    <string name="ui_no_translation">(No translation generated)</string>
+    <string name="ui_copy_text">Original: %1$s\nTranslation: %2$s</string>
+    <string name="ui_copy_label_ai">AI Translation</string>
+    <string name="ui_copied_clipboard">Copied to clipboard</string>
+    <string name="ui_tts_note">TTS: %1$s</string>
+
+    <!-- Text tab -->
+    <string name="ui_enter_text">Enter text to translate (%1$s)</string>
+    <string name="ui_clear">Clear</string>
+    <string name="ui_translate">Translate</string>
+    <string name="ui_target_translation">%1$s Translation:</string>
+    <string name="ui_tokens">%1$d tokens</string>
+    <string name="ui_copy_label_translation">Translation</string>
+    <string name="ui_copied_translation">Copied translation</string>
+    <string name="ui_tier_cache">Local cache</string>
+    <string name="ui_tier_engine">Local engine</string>
+    <string name="ui_tier_phrasebook">Local phrasebook</string>
+
+    <!-- Grammar tab -->
+    <string name="ui_grammar_correction">Grammar Correction</string>
+    <string name="ui_grammar_cleaned">Cleaned Text</string>
+    <string name="ui_on">On</string>
+    <string name="ui_off">Off</string>
+
+    <!-- Models tab -->
+    <string name="ui_offline_engine_info">Speech recognition, translation, and neural voices run 100% locally on your phone. No internet connection is needed or used.</string>
+    <string name="ui_engine_readiness">Engine readiness</string>
+    <string name="ui_engine_whisper">Whisper ASR</string>
+    <string name="ui_engine_indictrans">IndicTrans2</string>
+    <string name="ui_engine_piper">Piper TTS</string>
+    <string name="ui_engine_emotion">Emotion2Vec</string>
+    <string name="ui_not_reported">Not reported by engine</string>
+    <string name="ui_installed_models">Installed Models &amp; Engines:</string>
+    <string name="ui_no_diagnostics">No diagnostics reported yet. Tap Refresh Status to rescan.</string>
+    <string name="ui_refresh_status">Refresh Status</string>
+    <string name="ui_model_info">Category: %1$s • Size: %2$d MB</string>
+
+    <!-- OCR tab -->
+    <string name="ui_ocr_title">OCR</string>
+    <string name="ui_ocr_pick_image">Pick Image</string>
+    <string name="ui_ocr_samples">Samples</string>
+    <string name="ui_ocr_extracted">Extracted Text</string>
+    <string name="ui_ocr_no_text">No text detected in image</string>
+    <string name="ui_ocr_edit_hint">Edit extracted text</string>
+
+    <!-- SOS tab -->
+    <string name="ui_sos_title">Emergency Phrases</string>
+    <string name="ui_emergency_categories">Emergency Categories</string>
+    <string name="ui_speak">Speak</string>
+    <string name="ui_flashcard">Flashcard</string>
+    <string name="ui_close">Close</string>
+
+    <!-- History tab -->
+    <string name="ui_history_title">History</string>
+    <string name="ui_history_search">Search history</string>
+    <string name="ui_history_all">All</string>
+    <string name="ui_history_voice">Voice</string>
+    <string name="ui_history_text">Text</string>
+    <string name="ui_history_ocr">OCR</string>
+    <string name="ui_history_pinned">Pinned</string>
+    <string name="ui_history_clear">Clear History</string>
+    <string name="ui_pin">Pin</string>
+    <string name="ui_unpin">Unpin</string>
+    <string name="ui_replay">Replay</string>
+    <string name="ui_no_history">No history yet</string>
+
+    <!-- General status -->
+    <string name="ui_processing">Processing…</string>
+    <string name="ui_done">Done</string>
+    <string name="ui_error_generic">Something went wrong</string>
+
+    <!-- Shared COUI components -->
+    <string name="ui_from">From</string>
+    <string name="ui_to">To</string>
+    <string name="ui_swap_languages">Swap languages</string>
+    <string name="ui_beta_badge">BETA</string>
+    <string name="ui_retry">Retry</string>
+    <string name="ui_error_title">Something went wrong</string>
+    <string name="ui_listening">Listening — tap to stop</string>
+    <string name="ui_tap_to_speak">Tap to speak (%1$s)</string>
+    <string name="ui_emotion_unavailable">Emotion: unavailable</string>
+    <string name="ui_stop">Stop</string>
+    <string name="ui_play_audio">Play Audio</string>
+    <string name="ui_speaking">Speaking…</string>
+    <string name="ui_copy">Copy</string>
+    <string name="ui_ms">%1$d ms</string>
+    <string name="ui_tts_latency">TTS: %1$d ms</string>
+
+    <!-- Model extraction status -->
+    <string name="ui_extracting_status">Loading %1$s (%2$d/%3$d)</string>
+    <string name="ui_models_ready">Ready — %1$d model files extracted</string>
+    <string name="ui_extraction_idle">Waiting to start model extraction</string>
+    <string name="ui_status_unavailable">Model status unavailable</string>
 </resources>

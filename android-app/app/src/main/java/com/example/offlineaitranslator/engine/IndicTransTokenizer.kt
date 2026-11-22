@@ -34,6 +34,51 @@ class IndicTransTokenizer(
     companion object {
         const val METASPACE = "\u2581"
 
+        // Every punctuation symbol the model expects to see as its own BPE token.
+        // Using one regex keeps encoding deterministic for both ASCII and
+        // Indic/Arabic marks instead of relying on a char-by-char allow list.
+        private val PUNCTUATION_SPACING = Regex("([.,!?;:()\"'\\-।؟،])")
+
+        // Decode side: punctuation never keeps a leading space.
+        private val SPACE_BEFORE_PUNCTUATION = Regex("\\s+([.,!?;:।؟،])")
+
+        // Covers ASCII whitespace plus NBSP, narrow NBSP, ideographic and line separators.
+        private val WHITESPACE_REGEX =
+            Regex("[\\s\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]+")
+
+        /** Smart quotes and the many Unicode dash forms are normalized before BPE. */
+        private fun normalizeQuotesAndDashes(text: String): String {
+            var out = text
+            for (c in charArrayOf('\u2018', '\u2019', '\u201A', '\u201B', '\u02BC', '`', '\u00B4')) {
+                out = out.replace(c, '\'')
+            }
+            for (c in charArrayOf('\u201C', '\u201D', '\u201E', '\u201F')) {
+                out = out.replace(c, '"')
+            }
+            for (c in charArrayOf('\u2011', '\u2013', '\u2014', '\u2015', '\u2212', '\uFE58', '\uFE63', '\uFF0D')) {
+                out = out.replace(c, '-')
+            }
+            return out
+        }
+
+        /**
+         * Devanagari is the model's unified internal script. Only other Indic scripts
+         * need normalization before BPE lookup; English and Devanagari languages do not.
+         */
+        private fun needsDevanagariNormalization(srcLang: String): Boolean {
+            val code = srcLang.trim()
+            if (code.equals("eng_Latn", ignoreCase = true) ||
+                code.equals("en", ignoreCase = true) ||
+                code.equals("eng", ignoreCase = true)
+            ) return false
+            val block = IndicScriptConverter.getScriptBlock(code)
+            if (block != null) return block != IndicScriptConverter.BLOCK_DEVANAGARI
+            // Sinhala is outside the converter's Brahmic block table but is still an Indic script.
+            return code.equals("sin_Sinh", ignoreCase = true) ||
+                code.equals("sin", ignoreCase = true) ||
+                code.equals("si", ignoreCase = true)
+        }
+
         fun loadFromDir(modelDir: File): IndicTransTokenizer {
             val srcVocabFile = File(modelDir, "dict.SRC.json")
             val tgtVocabFile = File(modelDir, "dict.TGT.json")
@@ -85,18 +130,44 @@ class IndicTransTokenizer(
     }
 
     /**
-     * Preprocesses text by spacing out punctuation and prepending language tags.
+     * Normalizes whitespace/script, spaces out attached punctuation and prepends
+     * the required `<src_lang> <tgt_lang>` tags before BPE lookup.
      */
     fun preprocess(text: String, srcLang: String, tgtLang: String): String {
-        var clean = text.trim()
-        // Space out punctuation marks
-        val punctuation = arrayOf("?", "!", ",", ".", "।", ":", ";", "\"", "'", "(", ")", "[", "]")
-        for (p in punctuation) {
-            clean = clean.replace(p, " $p ")
+        // Normalize every kind of Unicode whitespace (including NBSP) first.
+        var clean = WHITESPACE_REGEX.replace(text.trim(), " ").trim()
+
+        if (needsDevanagariNormalization(srcLang)) {
+            clean = try {
+                IndicScriptConverter.toDevanagari(clean, srcLang)
+            } catch (t: Throwable) {
+                // Unmapped script or converter error: fall back to the original text.
+                clean
+            }
         }
-        // Normalize whitespaces
-        clean = clean.replace("\\s+".toRegex(), " ").trim()
+
+        // Normalize typographic quotes/dashes, then split every punctuation mark
+        // into its own token so a known word + mark never collapses into <unk>.
+        clean = normalizeQuotesAndDashes(clean)
+        clean = PUNCTUATION_SPACING.replace(clean, " $1 ")
+        clean = WHITESPACE_REGEX.replace(clean, " ").trim()
+
         return "$srcLang $tgtLang $clean"
+    }
+
+    /**
+     * English vocabulary is case sensitive in dict.SRC.json. A capitalized word
+     * that is absent while its lowercase form is present must fold to lowercase
+     * before BPE lookup (e.g. "Hello" -> "hello").
+     */
+    private fun resolveEnglishCase(word: String, srcLang: String): String {
+        if (!srcLang.equals("eng_Latn", ignoreCase = true)) return word
+        if (word.isEmpty() || !word[0].isUpperCase()) return word
+        val lower = word.lowercase()
+        if (lower == word) return word
+        if (srcVocab.containsKey(word) || srcVocab.containsKey("$METASPACE$word")) return word
+        if (srcVocab.containsKey(lower) || srcVocab.containsKey("$METASPACE$lower")) return lower
+        return word
     }
 
     /**
@@ -107,8 +178,12 @@ class IndicTransTokenizer(
         val words = preprocessed.split(' ')
         val tokenIds = mutableListOf<Long>()
 
-        for (word in words) {
-            if (word.isEmpty()) continue
+        for (rawWord in words) {
+            if (rawWord.isEmpty()) continue
+
+            // English: fall back to the lowercase dictionary entry when the
+            // capitalized surface form is unknown.
+            val word = resolveEnglishCase(rawWord, srcLang)
 
             // 1. Check if word is language tag or exact match in vocab
             val exactId = srcVocab[word]
@@ -190,23 +265,59 @@ class IndicTransTokenizer(
      * Decodes generated token IDs back to a readable string.
      */
     fun decode(tokenIds: List<Int>): String {
-        val pieces = mutableListOf<String>()
+        val pieces = ArrayList<String>(tokenIds.size)
         for (id in tokenIds) {
-            if (id in listOf(0, 1, 2, 3)) continue // Skip pad, bos, eos, unk
+            if (id == 0 || id == 1 || id == 2 || id == 3) continue // Skip pad, bos, eos, unk
             val token = tgtIdToToken[id]
             if (token != null) {
                 pieces.add(token)
             }
         }
+        return SPACE_BEFORE_PUNCTUATION.replace(detokenize(pieces.joinToString("")), "$1")
+    }
 
-        val raw = pieces.joinToString("").replace(METASPACE, " ")
+    /**
+     * SentencePiece detokenization: "▁" starts a word (a leading one is dropped),
+     * punctuation attaches to the preceding word and an opening quote attaches to
+     * the following word.
+     */
+    private fun detokenize(joined: String): String {
+        val raw = WHITESPACE_REGEX.replace(joined.replace(METASPACE, " "), " ")
+        val noSpaceBefore = setOf(',', '.', '!', '?', ';', ':', '।', ')', ']')
+        val result = StringBuilder(raw.length)
+        var pendingSpace = false
+        var i = 0
 
-        // Post-process spacing around punctuation
-        var cleaned = raw
-        val punctAttached = arrayOf(",", ".", "!", "?", ":", ";", "।")
-        for (p in punctAttached) {
-            cleaned = cleaned.replace(" $p", p)
+        while (i < raw.length) {
+            val c = raw[i]
+            if (c.isWhitespace()) {
+                if (result.isNotEmpty()) pendingSpace = true
+                i++
+                continue
+            }
+
+            if (c == '"' || c == '\'') {
+                // A metaspace before a quote marks an opening quote; a bare quote
+                // token is a closing one and belongs to the preceding word.
+                if (pendingSpace || result.isEmpty()) {
+                    if (result.isNotEmpty()) result.append(' ')
+                    result.append(c)
+                    var j = i + 1
+                    while (j < raw.length && raw[j].isWhitespace()) j++
+                    i = j // no space after an opening quote
+                } else {
+                    result.append(c)
+                    i++
+                }
+                pendingSpace = false
+                continue
+            }
+
+            if (pendingSpace && result.isNotEmpty() && c !in noSpaceBefore) result.append(' ')
+            result.append(c)
+            pendingSpace = false
+            i++
         }
-        return cleaned.replace("\\s+".toRegex(), " ").trim()
+        return result.toString().trim()
     }
 }

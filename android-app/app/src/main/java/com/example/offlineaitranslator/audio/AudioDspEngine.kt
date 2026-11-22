@@ -34,7 +34,7 @@ object AudioDspEngine {
     // Dynamic AGC & Whisper Normalizer Parameters
     const val TARGET_PEAK_LEVEL: Float = 0.55f        // -5.2 dBFS (healthy conversational peak level for Whisper ASR)
     const val TARGET_RMS_LEVEL: Float = 0.55f         // Kept for backward compatibility
-    const val GATE_THRESHOLD: Float = 0.004f          // -48 dBFS (ambient noise gate floor)
+    const val GATE_THRESHOLD: Float = 0.001f          // -60 dBFS: let soft speech reach the AGC
     const val MAX_GAIN: Float = 8.0f                  // +18.06 dB whisper boost (8.0x to restore soft voices)
     const val MIN_GAIN: Float = 0.50f                 // -6.0 dB maximum shout attenuation (prevents crushing conversational speech)
     const val ATTACK_TIME_SEC: Float = 0.020f         // 20 ms smooth attack
@@ -311,10 +311,10 @@ object AudioDspEngine {
      * Trims leading and trailing silence (frames where RMS < threshold)
      * with a 200ms safety pad so initial and trailing consonants are NEVER clipped.
      */
-    fun trimSilence(samples: FloatArray, sampleRate: Int = 16000, threshold: Float = 0.003f): FloatArray {
+    fun trimSilence(samples: FloatArray, sampleRate: Int = 16000, threshold: Float = 0.0015f): FloatArray {
         if (samples.isEmpty()) return samples
         val windowSize = sampleRate / 20 // 50ms window
-        val safetyMargin = sampleRate / 5 // 200ms padding
+        val safetyMargin = sampleRate / 4 // 250ms padding so Whisper keeps first/last words
         var start = 0
         var end = samples.size
         var foundSpeech = false

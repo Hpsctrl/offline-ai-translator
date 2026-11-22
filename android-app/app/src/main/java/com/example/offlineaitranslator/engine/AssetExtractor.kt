@@ -32,7 +32,19 @@ class AssetExtractor(private val context: Context) {
     companion object {
         private const val TAG = "AssetExtractor"
         private const val ASSET_MODELS_ROOT = "models"
-        private const val COMPLETION_MARKER = ".extraction_complete_v3"
+        private const val COMPLETION_MARKER = ".extraction_complete_v5"
+        private const val LEGACY_MARKER = ".extraction_complete_v4"
+
+        /** Neural weight files that must exist on device before extraction is considered complete. */
+        private val REQUIRED_WEIGHTS = listOf(
+            "asr/whisper-tiny-indic/tiny-encoder.int8.onnx",
+            "asr/whisper-tiny-indic/tiny-decoder.int8.onnx",
+            "asr/whisper-tiny-indic/silero_vad.int8.onnx",
+            "emotion/emotion2vec-plus-base/model.onnx",
+            "tts/vits-piper-hi_IN-pratham-medium/hi_IN-pratham-medium.onnx",
+            "translation/indictrans2-indic-en-dist-200m/encoder_model.onnx",
+            "translation/indictrans2-en-indic-dist-200m/encoder_model.onnx",
+        )
     }
 
     private val _state = MutableStateFlow<ExtractionState>(ExtractionState.Idle)
@@ -44,14 +56,16 @@ class AssetExtractor(private val context: Context) {
     fun isExtractionComplete(): Boolean {
         val target = modelsDir
         val marker = File(target, COMPLETION_MARKER)
-        return marker.exists() && target.exists() && (target.listFiles()?.isNotEmpty() == true)
+        if (!marker.exists() || !target.exists()) return false
+        // A marker alone is not enough: a previous build may have had no .onnx files at all.
+        return REQUIRED_WEIGHTS.all { File(target, it).length() > 0 }
     }
 
     suspend fun extractIfNeeded(): Result<File> = withContext(Dispatchers.IO) {
         val target = modelsDir
         val marker = File(target, COMPLETION_MARKER)
 
-        if (marker.exists()) {
+        if (isExtractionComplete()) {
             Log.i(TAG, "Models already extracted at: ${target.absolutePath}")
             val completed = ExtractionState.Completed(target, 0, 0)
             _state.value = completed
@@ -137,8 +151,9 @@ class AssetExtractor(private val context: Context) {
                 filesExtractedSoFar++
             }
 
-            // Write completion marker
-            marker.writeText("version=1.0\ntotalFiles=$totalFiles\ntotalBytes=$bytesExtractedSoFar\n")
+            // Write completion marker and retire the old one.
+            File(target, LEGACY_MARKER).delete()
+            marker.writeText("version=2.0\ntotalFiles=$totalFiles\ntotalBytes=$bytesExtractedSoFar\n")
             Log.i(TAG, "Successfully extracted $totalFiles model files ($bytesExtractedSoFar bytes) to ${target.absolutePath}")
 
             val completed = ExtractionState.Completed(target, totalFiles, bytesExtractedSoFar)

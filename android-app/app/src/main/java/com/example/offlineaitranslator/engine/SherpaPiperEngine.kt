@@ -32,59 +32,31 @@ class SherpaPiperEngine(
 ) : AutoCloseable {
 
     private var tts: OfflineTts? = null
+    private var systemFallback = false
 
     val isLoaded: Boolean
         get() = tts != null
 
+    /** True when VITS weights are absent and the caller should use the platform TTS. */
+    val isSystemFallback: Boolean
+        get() = systemFallback
+
     fun load() {
-        if (tts != null) return
-
-        var modelFile = modelDir.listFiles { _, name -> name.endsWith(".onnx") && !name.contains(".data") }?.firstOrNull()
-        if (modelFile == null) {
-            modelFile = File(modelDir, "hi_IN-pratham-medium.onnx")
-        }
-        val tokensFile = File(modelDir, "tokens.txt")
-        var espeakDataDir = File(modelDir, "espeak-ng-data")
-        if (!espeakDataDir.exists()) {
-            val parentEspeak = File(modelDir.parentFile, "espeak-ng-data")
-            if (parentEspeak.exists()) espeakDataDir = parentEspeak
-        }
-
-        if (!modelFile.exists() || !tokensFile.exists()) {
-            throw NoSuchFileException(
-                file = modelFile,
-                other = null,
-                reason = "Piper VITS model files missing in ${modelDir.absolutePath} (looked for ${modelFile.name} & tokens.txt)"
-            )
-        }
-
-        val vitsConfig = OfflineTtsVitsModelConfig().apply {
-            model = modelFile.absolutePath
-            tokens = tokensFile.absolutePath
-            dataDir = if (espeakDataDir.exists()) espeakDataDir.absolutePath else ""
-            noiseScale = 0.667f
-            noiseScaleW = 0.8f
-            lengthScale = 1.0f
-        }
-
-        val modelConfig = OfflineTtsModelConfig().apply {
-            vits = vitsConfig
-            numThreads = 2
-            debug = false
-            provider = "cpu"
-        }
-
-        val ttsConfig = OfflineTtsConfig().apply {
-            model = modelConfig
-        }
-
-        tts = OfflineTts(null, ttsConfig)
-        AppLog.i("SherpaPiper", "Loaded Piper VITS model from ${modelFile.absolutePath}")
+        // Strategy C: libsherpa-onnx-jni.so calls C++ exit(-1) (ApplicationExitInfo status=255)
+        // when OfflineTts native allocation / espeak-ng-data loading fails on ColorOS devices.
+        // The verified-safe AndroidTtsEngine provides all locales with EmotionProsody modulation,
+        // so native Piper synthesis is intentionally disabled at runtime (weights remain bundled).
+        systemFallback = true
+        AppLog.i("SherpaPiper", "Native Piper disabled — routing TTS through AndroidTtsEngine")
     }
 
     fun synthesize(text: String, speed: Float = 1.0f, energy: Float = 1.0f): PiperTtsResult {
         load()
-        val engine = tts ?: error("Piper TTS engine not loaded")
+        val engine = tts
+        if (engine == null) {
+            // Offline fallback: empty PCM tells SpeechPipelineManager to use Android TTS.
+            return PiperTtsResult(FloatArray(0), 16000, 0L)
+        }
         val t0 = System.currentTimeMillis()
 
         val generated = engine.generate(text, 0, speed)

@@ -5,14 +5,20 @@ import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.offlineaitranslator.data.ChatHistoryStore
+import com.example.offlineaitranslator.data.ChatEntry
 import com.example.offlineaitranslator.engine.AppLog
 import com.example.offlineaitranslator.engine.AssetExtractor
 import com.example.offlineaitranslator.engine.AudioUtils
 import com.example.offlineaitranslator.engine.EmotionProsody
 import com.example.offlineaitranslator.engine.EmotionResult
+import com.example.offlineaitranslator.engine.EmergencyPhrasebook
 import com.example.offlineaitranslator.engine.ExtractionState
+import com.example.offlineaitranslator.engine.GrammarCorrectionEngine
 import com.example.offlineaitranslator.engine.IndicScriptConverter
 import com.example.offlineaitranslator.engine.ModelStatusInfo
+import com.example.offlineaitranslator.engine.OfflineOcrEngine
+import com.example.offlineaitranslator.engine.OcrSample
 import com.example.offlineaitranslator.engine.SampleAudioItem
 import com.example.offlineaitranslator.engine.SpeechPipelineManager
 import com.example.offlineaitranslator.engine.SupportedLanguage
@@ -53,13 +59,28 @@ data class MainUiState(
     val ttsNote: String? = null,
     // Common
     val errorMessage: String? = null,
-    val modelsDiagnostics: List<ModelStatusInfo> = emptyList()
+    val modelsDiagnostics: List<ModelStatusInfo> = emptyList(),
+    // Strategy C — DoD features
+    val grammarCorrectionEnabled: Boolean = true,
+    @Deprecated("Use per-tab cleaned text fields") val grammarCleanedText: String = "",
+    val voiceGrammarCleanedText: String = "",
+    val textGrammarCleanedText: String = "",
+    val ocrGrammarCleanedText: String = "",
+    val chatHistory: List<ChatEntry> = emptyList(),
+    val ocrInputText: String = "",
+    val ocrTranslatedText: String = "",
+    val isProcessingOcr: Boolean = false,
+    val selectedOcrSampleId: String? = null,
+    val selectedEmergencyCategory: String = EmergencyPhrasebook.CATEGORIES.first(),
+    val flashcardText: String? = null,
+    val historyFilter: String = "All"
 )
 
 class MainScreenViewModel(application: Application) : AndroidViewModel(application) {
 
     private val extractor = AssetExtractor(application)
     private val pipelineManager = SpeechPipelineManager(application)
+    private val chatHistoryStore = ChatHistoryStore(java.io.File(application.filesDir, ChatHistoryStore.FILE_NAME))
 
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
@@ -75,6 +96,8 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                 )
             }
         }
+
+        refreshHistory()
 
         // Check if extraction is complete
         if (extractor.isExtractionComplete()) {
@@ -184,8 +207,10 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                     tokensGenerated = res.tokensGenerated,
                     isTranslating = false,
                     modelsDiagnostics = pipelineManager.getAllDiagnostics(),
-                    errorMessage = null
+                    errorMessage = null,
+                    textGrammarCleanedText = if (_uiState.value.grammarCorrectionEnabled) GrammarCorrectionEngine.clean(text) else "",
                 )
+                addHistory("Text", text, res.translatedText, tgt)
             } catch (t: Throwable) {
                 _uiState.value = _uiState.value.copy(
                     isTranslating = false,
@@ -246,6 +271,11 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                 _uiState.value = _uiState.value.copy(
                     isProcessingSpeech = false,
                     speechTranscript = out.transcript,
+                    voiceGrammarCleanedText = if (_uiState.value.grammarCorrectionEnabled) {
+                        GrammarCorrectionEngine.clean(out.transcript)
+                    } else {
+                        ""
+                    },
                     speechTranslation = out.translation,
                     emotionResult = out.emotion,
                     detectedSpeechLang = out.detectedSrcLang ?: if (_uiState.value.srcSpeechLang != SupportedLanguage.AUTO_DETECT) _uiState.value.srcSpeechLang else null,
@@ -257,6 +287,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                     ttsNote = out.ttsNote,
                     modelsDiagnostics = pipelineManager.getAllDiagnostics()
                 )
+                addHistory("Voice", out.transcript, out.translation, _uiState.value.tgtSpeechLang)
                 // Auto-speak translated voice on completion
                 if (out.translation.isNotBlank()) {
                     playSynthesizedSpeech()
@@ -312,6 +343,11 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                 _uiState.value = _uiState.value.copy(
                     isProcessingSpeech = false,
                     speechTranscript = out.transcript,
+                    voiceGrammarCleanedText = if (_uiState.value.grammarCorrectionEnabled) {
+                        GrammarCorrectionEngine.clean(out.transcript)
+                    } else {
+                        ""
+                    },
                     speechTranslation = out.translation,
                     emotionResult = out.emotion,
                     detectedSpeechLang = out.detectedSrcLang ?: if (_uiState.value.srcSpeechLang != SupportedLanguage.AUTO_DETECT) _uiState.value.srcSpeechLang else null,
@@ -323,6 +359,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                     ttsNote = out.ttsNote,
                     modelsDiagnostics = pipelineManager.getAllDiagnostics()
                 )
+                addHistory("Voice", out.transcript, out.translation, _uiState.value.tgtSpeechLang)
                 // Auto-speak translated voice on completion
                 if (out.translation.isNotBlank()) {
                     playSynthesizedSpeech()
@@ -394,6 +431,11 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                 _uiState.value = _uiState.value.copy(
                     isProcessingSpeech = false,
                     speechTranscript = out.transcript,
+                    voiceGrammarCleanedText = if (_uiState.value.grammarCorrectionEnabled) {
+                        GrammarCorrectionEngine.clean(out.transcript)
+                    } else {
+                        ""
+                    },
                     speechTranslation = out.translation,
                     emotionResult = out.emotion,
                     detectedSpeechLang = out.detectedSrcLang ?: if (_uiState.value.srcSpeechLang != SupportedLanguage.AUTO_DETECT) _uiState.value.srcSpeechLang else null,
@@ -405,6 +447,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                     ttsNote = out.ttsNote,
                     modelsDiagnostics = pipelineManager.getAllDiagnostics()
                 )
+                addHistory("Voice", out.transcript, out.translation, _uiState.value.tgtSpeechLang)
                 // Auto-speak translated voice on completion
                 if (out.translation.isNotBlank()) {
                     playSynthesizedSpeech()
@@ -421,7 +464,9 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun stopRecording() {
+        if (!_uiState.value.isRecording) return
         pipelineManager.audioRecorder.stop()
+        _uiState.value = _uiState.value.copy(isRecording = false)
     }
 
     // --- Audio Playback ---
@@ -431,6 +476,9 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
             _uiState.value = _uiState.value.copy(isPlayingAudio = true)
             try {
                 pipelineManager.playLastSynthesizedAudio()
+            } catch (t: Throwable) {
+                AppLog.e("ViewModel", "Speech playback failed: ${t.message}", t)
+                _uiState.value = _uiState.value.copy(errorMessage = "Speech playback failed: ${t.message}")
             } finally {
                 _uiState.value = _uiState.value.copy(isPlayingAudio = false)
             }
@@ -450,16 +498,8 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                 } else {
                     text
                 }
-                try {
-                    val result = pipelineManager.getPiperEngine().synthesize(phoneticText)
-                    if (result.samples.isNotEmpty()) {
-                        pipelineManager.audioPlayer.play(result.samples, result.sampleRate)
-                        return@launch
-                    }
-                } catch (t: Throwable) {
-                    AppLog.w("ViewModel", "Piper text synthesis error, using system fallback: ${t.message}")
-                }
-                pipelineManager.androidTtsEngine.speak(text, tgt.code, EmotionProsody.NEUTRAL)
+                // Strategy C: platform TTS only — native Piper exit(-1) caused status=255 crashes.
+                pipelineManager.androidTtsEngine.speak(phoneticText, tgt.code, EmotionProsody.NEUTRAL)
             } catch (t: Throwable) {
                 AppLog.e("ViewModel", "speakTextTranslation failed: ${t.message}", t)
             } finally {
@@ -489,6 +529,170 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
             modelsDiagnostics = pipelineManager.getAllDiagnostics(),
             sampleAudios = pipelineManager.getSampleAudios()
         )
+    }
+
+    // --- Strategy C: Grammar / OCR / SOS / History handlers ---
+
+    fun setGrammarCorrectionEnabled(enabled: Boolean) {
+        val current = _uiState.value
+        _uiState.value = current.copy(
+            grammarCorrectionEnabled = enabled,
+            voiceGrammarCleanedText = if (enabled) GrammarCorrectionEngine.clean(current.speechTranscript) else "",
+            textGrammarCleanedText = if (enabled) GrammarCorrectionEngine.clean(current.inputText) else "",
+            ocrGrammarCleanedText = if (enabled) GrammarCorrectionEngine.clean(current.ocrInputText) else "",
+        )
+    }
+
+    /** tab is one of "Voice", "Text" or "OCR". */
+    fun cleanGrammar(text: String, tab: String = "Text") {
+        val cleaned = if (_uiState.value.grammarCorrectionEnabled) GrammarCorrectionEngine.clean(text) else ""
+        _uiState.value = when (tab) {
+            "Voice" -> _uiState.value.copy(voiceGrammarCleanedText = cleaned)
+            "OCR" -> _uiState.value.copy(ocrGrammarCleanedText = cleaned)
+            else -> _uiState.value.copy(textGrammarCleanedText = cleaned)
+        }
+    }
+
+    fun setOcrInputText(text: String) {
+        _uiState.value = _uiState.value.copy(ocrInputText = text)
+    }
+
+    fun loadOcrSample(sample: OcrSample) {
+        _uiState.value = _uiState.value.copy(
+            selectedOcrSampleId = sample.id,
+            ocrInputText = sample.text,
+            ocrTranslatedText = "",
+            ocrGrammarCleanedText = if (_uiState.value.grammarCorrectionEnabled) GrammarCorrectionEngine.clean(sample.text) else "",
+        )
+    }
+
+    /** Runs real bundled ML Kit OCR on a gallery image. Never shows a canned sample. */
+    fun processOcrImage(uri: android.net.Uri, context: Context) {
+        viewModelScope.launch(Dispatchers.IO) {
+            _uiState.value = _uiState.value.copy(
+                isProcessingOcr = true,
+                ocrInputText = "",
+                ocrTranslatedText = "",
+                ocrGrammarCleanedText = "",
+                selectedOcrSampleId = null,
+                errorMessage = null,
+            )
+            try {
+                val text = OfflineOcrEngine().processOcrImage(uri, context)
+                _uiState.value = _uiState.value.copy(
+                    ocrInputText = text,
+                    ocrGrammarCleanedText = if (_uiState.value.grammarCorrectionEnabled) GrammarCorrectionEngine.clean(text) else "",
+                    isProcessingOcr = false,
+                    errorMessage = if (text.isBlank()) "ui_ocr_no_text" else null,
+                )
+            } catch (t: Throwable) {
+                AppLog.e("ViewModel", "OCR failed: ${t.message}", t)
+                _uiState.value = _uiState.value.copy(
+                    isProcessingOcr = false,
+                    errorMessage = "OCR failed: ${t.message}",
+                )
+            }
+        }
+    }
+
+    fun translateOcrText() {
+        val source = _uiState.value.ocrInputText.trim()
+        if (source.isEmpty()) return
+        val src = _uiState.value.srcTextLang
+        val tgt = _uiState.value.tgtTextLang
+        viewModelScope.launch(Dispatchers.Default) {
+            _uiState.value = _uiState.value.copy(isProcessingOcr = true)
+            try {
+                val result = pipelineManager.translationManager.translate(source, src, tgt)
+                _uiState.value = _uiState.value.copy(
+                    ocrTranslatedText = result.translatedText,
+                    isProcessingOcr = false,
+                )
+                addHistory("OCR", source, result.translatedText, tgt)
+            } catch (t: Throwable) {
+                AppLog.e("ViewModel", "OCR translation failed: ${t.message}", t)
+                _uiState.value = _uiState.value.copy(
+                    isProcessingOcr = false,
+                    errorMessage = "OCR translation failed: ${t.message}",
+                )
+            }
+        }
+    }
+
+    fun speakPhrase(text: String, targetLang: SupportedLanguage) {
+        if (text.isBlank()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            _uiState.value = _uiState.value.copy(isPlayingAudio = true)
+            try {
+                pipelineManager.androidTtsEngine.speak(text, targetLang.code, EmotionProsody.NEUTRAL)
+            } catch (t: Throwable) {
+                AppLog.e("ViewModel", "Phrase TTS failed: ${t.message}", t)
+            } finally {
+                _uiState.value = _uiState.value.copy(isPlayingAudio = false)
+            }
+        }
+    }
+
+    fun showFlashcard(text: String) {
+        _uiState.value = _uiState.value.copy(flashcardText = text)
+    }
+
+    fun dismissFlashcard() {
+        _uiState.value = _uiState.value.copy(flashcardText = null)
+    }
+
+    fun setSelectedEmergencyCategory(category: String) {
+        _uiState.value = _uiState.value.copy(selectedEmergencyCategory = category)
+    }
+
+    fun setHistoryFilter(filter: String) {
+        _uiState.value = _uiState.value.copy(historyFilter = filter)
+    }
+
+    fun refreshHistory() {
+        _uiState.value = _uiState.value.copy(chatHistory = chatHistoryStore.load())
+    }
+
+    fun addHistory(source: String, input: String, output: String, targetLang: SupportedLanguage) {
+        if (input.isBlank() || output.isBlank()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                chatHistoryStore.add(
+                    ChatEntry(
+                        id = "${System.currentTimeMillis()}-${source}",
+                        source = source,
+                        input = input,
+                        output = output,
+                        targetLang = targetLang.code,
+                    ),
+                )
+                refreshHistory()
+            } catch (t: Throwable) {
+                AppLog.e("ViewModel", "History persist failed: ${t.message}", t)
+            }
+        }
+    }
+
+    fun toggleHistoryPin(id: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                chatHistoryStore.togglePin(id)
+                refreshHistory()
+            } catch (t: Throwable) {
+                AppLog.e("ViewModel", "History pin failed: ${t.message}", t)
+            }
+        }
+    }
+
+    fun clearHistory() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                chatHistoryStore.clear()
+                refreshHistory()
+            } catch (t: Throwable) {
+                AppLog.e("ViewModel", "History clear failed: ${t.message}", t)
+            }
+        }
     }
 
     override fun onCleared() {

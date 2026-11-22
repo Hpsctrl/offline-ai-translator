@@ -1,12 +1,16 @@
 package com.example.offlineaitranslator.audio
 
+import android.Manifest
 import android.annotation.SuppressLint
+import android.content.Context
+import android.content.pm.PackageManager
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.media.audiofx.AcousticEchoCanceler
 import android.media.audiofx.AutomaticGainControl
 import android.media.audiofx.NoiseSuppressor
+import androidx.core.content.ContextCompat
 import com.example.offlineaitranslator.engine.AppLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -26,7 +30,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  *    - Dynamic software AGC & whisper normalizer (+18.1 dB boost)
  *    - Soft-knee tanh peak limiter (no digital clipping)
  */
-class AudioRecorder {
+class AudioRecorder(private val context: Context? = null) {
 
     companion object {
         private const val TAG = "AudioRecorder"
@@ -74,6 +78,15 @@ class AudioRecorder {
         enableDsp: Boolean = true,
         onAmplitude: ((Float) -> Unit)? = null
     ): FloatArray = withContext(Dispatchers.IO) {
+        // Guard the native AudioRecord constructor: starting it without RECORD_AUDIO can abort the
+        // process on ColorOS. The Activity always grants this permission before calling us.
+        if (context != null && ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.RECORD_AUDIO,
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            throw SecurityException("RECORD_AUDIO permission not granted")
+        }
         val channelConfig = AudioFormat.CHANNEL_IN_MONO
         val audioFormat = AudioFormat.ENCODING_PCM_16BIT
         val minBufferSize = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat)

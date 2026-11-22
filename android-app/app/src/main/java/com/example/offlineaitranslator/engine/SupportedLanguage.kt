@@ -9,47 +9,49 @@ enum class SupportedLanguage(
     val iso639_3: String,
     val script: String,
     val isRtl: Boolean = false,
-    val category: String = "indic" // "indic", "global", or "universal"
+    val category: String = "indic", // "indic", "global", or "universal"
+    val isBeta: Boolean = false,      // shows BETA badge in text mode
+    val isVoiceBeta: Boolean = false, // shows BETA badge in voice mode
 ) {
     // --- Special Auto-Detect Mode ---
     AUTO_DETECT("auto", "Auto-Detect", "✨ Auto-Detect", "auto", "auto", "auto", "Universal", false, "universal"),
 
     // --- 22 Official Scheduled Indian Languages ---
-    ASSAMESE("asm_Beng", "Assamese", "অসমীয়া", "as", "as", "asm", "Bengali-Assamese", false, "indic"),
+    ASSAMESE("asm_Beng", "Assamese", "অসমীয়া", "as", "as", "asm", "Bengali-Assamese", false, "indic", isVoiceBeta = true),
     BENGALI("ben_Beng", "Bengali", "বাংলা", "bn", "bn", "ben", "Bengali", false, "indic"),
-    BODO("brx_Deva", "Bodo", "बर'", "brx", "brx", "brx", "Devanagari", false, "indic"),
-    DOGRI("doi_Deva", "Dogri", "डोगरी", "doi", "doi", "doi", "Devanagari", false, "indic"),
+    BODO("brx_Deva", "Bodo", "बर'", "brx", "brx", "brx", "Devanagari", false, "indic", isVoiceBeta = true),
+    DOGRI("doi_Deva", "Dogri", "डोगरी", "doi", "doi", "doi", "Devanagari", false, "indic", isVoiceBeta = true),
     GUJARATI("guj_Gujr", "Gujarati", "ગુજરાતી", "gu", "gu", "guj", "Gujarati", false, "indic"),
     HINDI("hin_Deva", "Hindi", "हिन्दी", "hi", "hi", "hin", "Devanagari", false, "indic"),
     KANNADA("kan_Knda", "Kannada", "ಕನ್ನಡ", "kn", "kn", "kan", "Kannada", false, "indic"),
-    KASHMIRI("kas_Arab", "Kashmiri", "کٲشُر", "ks", "ks", "kas", "Perso-Arabic", true, "indic"),
-    KONKANI("gom_Deva", "Konkani", "कोंकणी", "kok", "kok", "gom", "Devanagari", false, "indic"),
-    MAITHILI("mai_Deva", "Maithili", "मैथिली", "mai", "mai", "mai", "Devanagari", false, "indic"),
+    KASHMIRI("kas_Arab", "Kashmiri", "کٲشُر", "ks", "ks", "kas", "Perso-Arabic", true, "indic", isVoiceBeta = true),
+    KONKANI("gom_Deva", "Konkani", "कोंकणी", "kok", "kok", "gom", "Devanagari", false, "indic", isVoiceBeta = true),
+    MAITHILI("mai_Deva", "Maithili", "मैथिली", "mai", "mai", "mai", "Devanagari", false, "indic", isVoiceBeta = true),
     MALAYALAM("mal_Mlym", "Malayalam", "മലയാളം", "ml", "ml", "mal", "Malayalam", false, "indic"),
-    MANIPURI("mni_Beng", "Manipuri (Meitei)", "মৈতৈলোন্", "mni", "mni", "mni", "Bengali-Meitei", false, "indic"),
+    MANIPURI("mni_Beng", "Manipuri (Meitei)", "মৈতৈলোন্", "mni", "mni", "mni", "Bengali-Meitei", false, "indic", isVoiceBeta = true),
     MARATHI("mar_Deva", "Marathi", "मराठी", "mr", "mr", "mar", "Devanagari", false, "indic"),
     NEPALI("npi_Deva", "Nepali", "नेपाली", "ne", "ne", "npi", "Devanagari", false, "indic"),
     ODIA("ory_Orya", "Odia", "ଓଡ଼ିଆ", "or", "or", "ory", "Odia", false, "indic"),
     PUNJABI("pan_Guru", "Punjabi", "ਪੰਜਾਬੀ", "pa", "pa", "pan", "Gurmukhi", false, "indic"),
-    SANSKRIT("san_Deva", "Sanskrit", "संस्कृतम्", "sa", "sa", "san", "Devanagari", false, "indic"),
-    SANTALI("sat_Olck", "Santali", "ᱥᱟᱱᱛᱟᱲᱤ", "sat", "sat", "sat", "Ol Chiki", false, "indic"),
-    SINDHI("snd_Arab", "Sindhi", "سنڌي", "sd", "sd", "snd", "Perso-Arabic", true, "indic"),
+    SANSKRIT("san_Deva", "Sanskrit", "संस्कृतम्", "sa", "sa", "san", "Devanagari", false, "indic", isVoiceBeta = true),
+    SANTALI("sat_Olck", "Santali", "ᱥᱟᱱᱛᱟᱲᱤ", "sat", "sat", "sat", "Ol Chiki", false, "indic", isVoiceBeta = true),
+    SINDHI("snd_Arab", "Sindhi", "سنڌي", "sd", "sd", "snd", "Perso-Arabic", true, "indic", isVoiceBeta = true),
     TAMIL("tam_Taml", "Tamil", "தமிழ்", "ta", "ta", "tam", "Tamil", false, "indic"),
     TELUGU("tel_Telu", "Telugu", "తెలుగు", "te", "te", "tel", "Telugu", false, "indic"),
     URDU("urd_Arab", "Urdu", "اردو", "ur", "ur", "urd", "Perso-Arabic", true, "indic"),
 
     // --- 11 Major Global Languages ---
     ENGLISH("eng_Latn", "English", "English", "en", "en", "eng", "Latin", false, "global"),
-    SPANISH("spa_Latn", "Spanish", "Español", "es", "es", "spa", "Latin", false, "global"),
-    JAPANESE("jpn_Jpan", "Japanese", "日本語", "ja", "ja", "jpn", "Japanese", false, "global"),
-    CHINESE("zho_Hans", "Chinese (Simplified)", "中文 (简体)", "zh", "zh", "zho", "Han (Simplified)", false, "global"),
-    FRENCH("fra_Latn", "French", "Français", "fr", "fr", "fra", "Latin", false, "global"),
-    GERMAN("deu_Latn", "German", "Deutsch", "de", "de", "deu", "Latin", false, "global"),
-    RUSSIAN("rus_Cyrl", "Russian", "Русский", "ru", "ru", "rus", "Cyrillic", false, "global"),
-    ARABIC("ara_Arab", "Arabic", "العربية", "ar", "ar", "ara", "Arabic", true, "global"),
-    KOREAN("kor_Hang", "Korean", "한국어", "ko", "ko", "kor", "Hangul", false, "global"),
-    PORTUGUESE("por_Latn", "Portuguese", "Português", "pt", "pt", "por", "Latin", false, "global"),
-    ITALIAN("ita_Latn", "Italian", "Italiano", "it", "it", "ita", "Latin", false, "global");
+    SPANISH("spa_Latn", "Spanish", "Español", "es", "es", "spa", "Latin", false, "global", isBeta = true, isVoiceBeta = true),
+    JAPANESE("jpn_Jpan", "Japanese", "日本語", "ja", "ja", "jpn", "Japanese", false, "global", isBeta = true, isVoiceBeta = true),
+    CHINESE("zho_Hans", "Chinese (Simplified)", "中文 (简体)", "zh", "zh", "zho", "Han (Simplified)", false, "global", isBeta = true, isVoiceBeta = true),
+    FRENCH("fra_Latn", "French", "Français", "fr", "fr", "fra", "Latin", false, "global", isBeta = true, isVoiceBeta = true),
+    GERMAN("deu_Latn", "German", "Deutsch", "de", "de", "deu", "Latin", false, "global", isBeta = true, isVoiceBeta = true),
+    RUSSIAN("rus_Cyrl", "Russian", "Русский", "ru", "ru", "rus", "Cyrillic", false, "global", isBeta = true, isVoiceBeta = true),
+    ARABIC("ara_Arab", "Arabic", "العربية", "ar", "ar", "ara", "Arabic", true, "global", isBeta = true, isVoiceBeta = true),
+    KOREAN("kor_Hang", "Korean", "한국어", "ko", "ko", "kor", "Hangul", false, "global", isBeta = true, isVoiceBeta = true),
+    PORTUGUESE("por_Latn", "Portuguese", "Português", "pt", "pt", "por", "Latin", false, "global", isBeta = true, isVoiceBeta = true),
+    ITALIAN("ita_Latn", "Italian", "Italiano", "it", "it", "ita", "Latin", false, "global", isBeta = true, isVoiceBeta = true);
 
     val floresTag: String get() = code
 

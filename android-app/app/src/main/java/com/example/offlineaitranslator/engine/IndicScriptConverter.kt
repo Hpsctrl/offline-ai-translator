@@ -25,6 +25,8 @@ object IndicScriptConverter {
     const val BLOCK_TELUGU = 0x0C00     // te
     const val BLOCK_KANNADA = 0x0C80    // kn
     const val BLOCK_MALAYALAM = 0x0D00  // ml
+    const val BLOCK_PERSO_ARABIC = 0x0600  // ks, sd, ur (Indic languages written in Perso-Arabic script)
+    const val BLOCK_OL_CHIKI = 0x1C50      // sat (Santali)
 
     private const val COORDINATED_RANGE_START = 0x01
     private const val COORDINATED_RANGE_END = 0x6F
@@ -60,7 +62,16 @@ object IndicScriptConverter {
         "tam_Taml" to BLOCK_TAMIL, "ta" to BLOCK_TAMIL, "tam" to BLOCK_TAMIL,
         "tel_Telu" to BLOCK_TELUGU, "te" to BLOCK_TELUGU, "tel" to BLOCK_TELUGU,
         "kan_Knda" to BLOCK_KANNADA, "kn" to BLOCK_KANNADA, "kan" to BLOCK_KANNADA,
-        "mal_Mlym" to BLOCK_MALAYALAM, "ml" to BLOCK_MALAYALAM, "mal" to BLOCK_MALAYALAM
+        "mal_Mlym" to BLOCK_MALAYALAM, "ml" to BLOCK_MALAYALAM, "mal" to BLOCK_MALAYALAM,
+
+        // Perso-Arabic script Indic languages (RTL). Keeping them in the routing map
+        // guarantees a script-transliteration fallback instead of returning source text unchanged.
+        "kas_Arab" to BLOCK_PERSO_ARABIC, "ks" to BLOCK_PERSO_ARABIC, "kas" to BLOCK_PERSO_ARABIC,
+        "snd_Arab" to BLOCK_PERSO_ARABIC, "sd" to BLOCK_PERSO_ARABIC, "snd" to BLOCK_PERSO_ARABIC,
+        "urd_Arab" to BLOCK_PERSO_ARABIC, "ur" to BLOCK_PERSO_ARABIC, "urd" to BLOCK_PERSO_ARABIC,
+
+        // Ol Chiki (Santali)
+        "sat_Olck" to BLOCK_OL_CHIKI, "sat" to BLOCK_OL_CHIKI
     )
 
     fun getScriptBlock(langCode: String): Int? {
@@ -143,6 +154,25 @@ object IndicScriptConverter {
 
     fun transliterate(text: String, srcLang: SupportedLanguage, tgtLang: SupportedLanguage): String {
         return transliterate(text, srcLang.code, tgtLang.code)
+    }
+
+    /**
+     * Indic-wide routing fallback: guarantees that an Indic source/target pair is
+     * always routed through a script conversion path. All 22 Indic languages are
+     * present in [LANG_TO_BLOCK], so [isBrahmicScript] now returns true for each of
+     * them; when a word-level lexicon has no match, callers can use this helper to
+     * obtain script-converted text rather than the raw, unchanged source text.
+     */
+    fun transliterateForIndic(text: String, srcLang: SupportedLanguage, tgtLang: SupportedLanguage): String {
+        if (text.isBlank() || srcLang == tgtLang) return text
+        val converted = transliterate(text, srcLang.code, tgtLang.code)
+        if (converted != text) return converted
+        // Source and target share a block (e.g. two Devanagari languages). If the text
+        // is Latin/romanized, render it in the target's native script instead of echoing it.
+        if (text.none { it.code in 0x0900..0x1C7F } && !srcLang.code.equals("eng_Latn", true)) {
+            return fromDevanagari(romanToDevanagari(text), tgtLang.code)
+        }
+        return converted
     }
 
     /**

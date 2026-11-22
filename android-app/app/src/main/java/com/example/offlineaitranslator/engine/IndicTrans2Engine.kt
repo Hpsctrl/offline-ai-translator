@@ -22,7 +22,6 @@ class IndicTrans2Engine(
 
     companion object {
         private const val TAG = "IndicTrans2Engine"
-        private const val MAX_NEW_TOKENS = 128
     }
 
     private var env: OrtEnvironment? = null
@@ -49,10 +48,12 @@ class IndicTrans2Engine(
         val e = OrtEnvironment.getEnvironment()
         env = e
 
-        val numCores = maxOf(4, Runtime.getRuntime().availableProcessors())
+        // BASIC_OPT plus a small fixed thread pool avoids native RAM spikes that
+        // trigger ColorOS o-kill on low-memory devices.
         val opts = OrtSession.SessionOptions().apply {
-            setIntraOpNumThreads(numCores)
-            setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
+            setOptimizationLevel(OrtSession.SessionOptions.OptLevel.BASIC_OPT)
+            setIntraOpNumThreads(4)
+            setInterOpNumThreads(2)
         }
 
         val encFile = File(modelDir, "encoder_model.onnx")
@@ -92,6 +93,7 @@ class IndicTrans2Engine(
         // 1. Encode text
         val encoded = tok.encode(unifiedInputText, srcLang, tgtLang)
         val seqLen = encoded.inputIds.size
+        val maxNewTokens = (seqLen * 2).coerceIn(12, 96)
 
         val inputIdsTensor = OnnxTensor.createTensor(env, arrayOf(encoded.inputIds))
         val attnMaskTensor = OnnxTensor.createTensor(env, arrayOf(encoded.attentionMask))
@@ -106,11 +108,25 @@ class IndicTrans2Engine(
 
         // 3. Autoregressive greedy decoding loop
         val outputIds = mutableListOf<Int>()
+        val recentTokens = java.util.ArrayDeque<Int>()
         var currentTokenId = tok.bosId.toLong()
         var currentPastTensors = mutableMapOf<String, OnnxTensor>()
 
+        // no_repeat_ngram_size = 3: reject a token whose last two-token context
+        // has already been followed by that same token anywhere in the history.
+        fun wouldRepeatTrigram(candidate: Int): Boolean {
+            if (recentTokens.size < 2) return false
+            val history = recentTokens.toList()
+            val a = history[history.size - 2]
+            val b = history[history.size - 1]
+            for (i in 0 until history.size - 2) {
+                if (history[i] == a && history[i + 1] == b && history[i + 2] == candidate) return true
+            }
+            return false
+        }
+
         try {
-            for (step in 0 until MAX_NEW_TOKENS) {
+            for (step in 0 until maxNewTokens) {
                 val decInputs = mutableMapOf<String, OnnxTensor>()
                 val currInputIdsTensor = OnnxTensor.createTensor(env, arrayOf(longArrayOf(currentTokenId)))
 
@@ -122,29 +138,36 @@ class IndicTrans2Engine(
                 } else {
                     decInputs["input_ids"] = currInputIdsTensor
                     decInputs["encoder_attention_mask"] = attnMaskTensor
+                    // Verified: on every step after the first, the previous step's
+                    // present.* outputs (renamed to past_key_values.*) are passed here.
                     decInputs.putAll(currentPastTensors)
                     decPastSession.run(decInputs)
                 }
 
-                // Extract logits and pick greedy next token
+                // Extract logits, rank all candidates, then apply anti-hallucination rules.
                 val logitsTensor = decResult.get(0) as OnnxTensor
                 val logits = logitsTensor.value as Array<Array<FloatArray>>
                 val nextTokenScores = logits[0][logits[0].size - 1]
 
-                var maxIdx = 0
-                var maxScore = Float.NEGATIVE_INFINITY
-                for (i in nextTokenScores.indices) {
-                    if (nextTokenScores[i] > maxScore) {
-                        maxScore = nextTokenScores[i]
-                        maxIdx = i
+                val rankedCandidates = nextTokenScores.indices.toList().sortedByDescending { nextTokenScores[it] }
+                var nextToken = tok.eosId // fallback: terminate cleanly if nothing is allowed
+                for (candidate in rankedCandidates) {
+                    if (candidate == tok.eosId) {
+                        nextToken = candidate // EOS is never blocked
+                        break
                     }
+                    if (candidate == currentTokenId.toInt()) continue // no immediate duplicate
+                    if (wouldRepeatTrigram(candidate)) continue // no_repeat_ngram_size = 3
+                    nextToken = candidate // highest-scoring allowed candidate
+                    break
                 }
 
-                outputIds.add(maxIdx)
-                currentTokenId = maxIdx.toLong()
+                outputIds.add(nextToken)
+                recentTokens.addLast(nextToken)
+                currentTokenId = nextToken.toLong()
 
                 // If end-of-sequence, stop decoding
-                if (maxIdx == tok.eosId) {
+                if (nextToken == tok.eosId) {
                     currInputIdsTensor.close()
                     decResult.close()
                     break

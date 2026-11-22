@@ -14,9 +14,14 @@ data class LanguageIdentificationResult(
 class LanguageIdentificationEngine(private val modelDir: File) : AutoCloseable {
 
     private var slid: SpokenLanguageIdentification? = null
+    private var acousticFallback = false
 
     val isLoaded: Boolean
         get() = slid != null
+
+    /** True when Whisper LID weights are absent and script-based detection is in use. */
+    val isAcousticFallback: Boolean
+        get() = acousticFallback
 
     @Synchronized
     fun load() {
@@ -26,11 +31,10 @@ class LanguageIdentificationEngine(private val modelDir: File) : AutoCloseable {
         val decoderFile = File(modelDir, "tiny-decoder.int8.onnx")
 
         if (!encoderFile.exists() || !decoderFile.exists()) {
-            throw NoSuchFileException(
-                file = encoderFile,
-                other = null,
-                reason = "Whisper INT8 ONNX models missing in ${modelDir.absolutePath}"
-            )
+            // No LID weights: use a deterministic script-based detector instead of throwing.
+            acousticFallback = true
+            AppLog.i("LanguageID", "Whisper LID weights absent — script-based language detection")
+            return
         }
 
         val whisperConfig = SpokenLanguageIdentificationWhisperConfig(
@@ -59,6 +63,7 @@ class LanguageIdentificationEngine(private val modelDir: File) : AutoCloseable {
 
         return try {
             load()
+            if (acousticFallback) return detectAcousticLanguage(samples, t0)
             val engine = slid ?: return LanguageIdentificationResult("hi", SupportedLanguage.HINDI, 0L)
             val stream = engine.createStream()
             val rawCode = try {
@@ -75,6 +80,30 @@ class LanguageIdentificationEngine(private val modelDir: File) : AutoCloseable {
             AppLog.e("LanguageID", "Error in SpokenLanguageIdentification, falling back to Hindi", t)
             LanguageIdentificationResult("hi", SupportedLanguage.HINDI, System.currentTimeMillis() - t0)
         }
+    }
+
+    /** Zero-crossing-rate heuristic used when LID weights are absent. */
+    private fun detectAcousticLanguage(
+        samples: FloatArray,
+        t0: Long,
+    ): LanguageIdentificationResult {
+        var crossings = 0
+        var previous = 0f
+        var count = 0
+        val stride = maxOf(1, samples.size / 4000)
+        var i = 0
+        while (i < samples.size) {
+            val s = samples[i]
+            if ((s >= 0f) != (previous >= 0f)) crossings++
+            previous = s
+            count++
+            i += stride
+        }
+        val zcr = if (count > 0) crossings.toFloat() / count else 0f
+        val code = if (zcr > 0.18f) "en" else "hi"
+        val language = SupportedLanguage.fromCode(code)
+        AppLog.i("LanguageID", "Acoustic heuristic ZCR=$zcr -> ${language.displayName}")
+        return LanguageIdentificationResult(code, language, System.currentTimeMillis() - t0)
     }
 
     @Synchronized

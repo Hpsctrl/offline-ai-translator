@@ -1,0 +1,133 @@
+<resources>
+    <string name="app_name">本地 AI 翻译器</string>
+
+    <!-- COUI 应用外壳 -->
+    <string name="ui_app_title">AI 语音与文本翻译</string>
+    <string name="ui_offline_subtitle">离线模式 • 33 种语言</string>
+    <string name="ui_privacy_badge">100% 离线 • 零网络</string>
+    <string name="ui_version">v2.0</string>
+    <string name="ui_preparing_models">正在准备 AI 模型</string>
+    <string name="ui_model_setup_error">模型设置错误：%1$s</string>
+
+    <!-- 标签页 -->
+    <string name="ui_tab_voice">语音</string>
+    <string name="ui_tab_text">文本</string>
+    <string name="ui_tab_models">模型</string>
+    <string name="ui_tab_ocr">文字识别</string>
+    <string name="ui_tab_sos">应急</string>
+    <string name="ui_tab_history">历史</string>
+
+    <!-- 语音页 -->
+    <string name="ui_voice_translation">语音翻译</string>
+    <string name="ui_voice_hint">点击麦克风说话，或选择示例音频</string>
+    <string name="ui_grant_mic">授予麦克风权限</string>
+    <string name="ui_choose_audio">选择音频文件</string>
+    <string name="ui_audio_formats">支持 WAV、MP3 和 M4A</string>
+    <string name="ui_sample_audio">或使用示例音频测试</string>
+    <string name="ui_play_sample">播放 %1$s</string>
+    <string name="ui_translating_speech">正在翻译语音…</string>
+    <string name="ui_generating_local">正在本地生成翻译</string>
+    <string name="ui_recognized_output">识别结果</string>
+    <string name="ui_speech_input">语音输入（%1$s）：</string>
+    <string name="ui_no_speech">（未检测到语音）</string>
+    <!-- 视图模型固定英文占位符的本地化显示文案。 -->
+    <string name="ui_please_speak_clearly">（请对着麦克风清晰说话）</string>
+    <!-- 哨兵值与视图模型字面量完全一致，所有语言环境中保持不变。 -->
+    <string name="ui_no_speech_sentinel">(No speech detected)</string>
+    <string name="ui_speak_clearly_sentinel">(Please speak clearly into the microphone)</string>
+    <string name="ui_audio_duration">音频时长：%1$s 秒</string>
+    <string name="ui_translation_label">翻译（%1$s）：</string>
+    <string name="ui_no_translation">（未生成翻译）</string>
+    <string name="ui_copy_text">原文：%1$s\n译文：%2$s</string>
+    <string name="ui_copy_label_ai">AI 翻译</string>
+    <string name="ui_copied_clipboard">已复制到剪贴板</string>
+    <string name="ui_tts_note">语音合成：%1$s</string>
+
+    <!-- 文本页 -->
+    <string name="ui_enter_text">输入要翻译的文本（%1$s）</string>
+    <string name="ui_clear">清空</string>
+    <string name="ui_translate">翻译</string>
+    <string name="ui_target_translation">%1$s 译文：</string>
+    <string name="ui_tokens">%1$d 个标记</string>
+    <string name="ui_copy_label_translation">译文</string>
+    <string name="ui_copied_translation">译文已复制</string>
+    <string name="ui_tier_cache">本地缓存</string>
+    <string name="ui_tier_engine">本地引擎</string>
+    <string name="ui_tier_phrasebook">本地短语库</string>
+
+    <!-- 语法页 -->
+    <string name="ui_grammar_correction">语法纠正</string>
+    <string name="ui_grammar_cleaned">修正后文本</string>
+    <string name="ui_on">开</string>
+    <string name="ui_off">关</string>
+
+    <!-- 模型页 -->
+    <string name="ui_offline_engine_info">语音识别、翻译和神经语音全部在您的手机上本地运行。无需也不使用互联网连接。</string>
+    <string name="ui_engine_readiness">引擎就绪状态</string>
+    <string name="ui_engine_whisper">Whisper 语音识别</string>
+    <string name="ui_engine_indictrans">IndicTrans2</string>
+    <string name="ui_engine_piper">Piper 语音合成</string>
+    <string name="ui_engine_emotion">Emotion2Vec</string>
+    <string name="ui_not_reported">引擎未报告</string>
+    <string name="ui_installed_models">已安装的模型与引擎：</string>
+    <string name="ui_no_diagnostics">尚无诊断信息。点按“刷新状态”重新扫描。</string>
+    <string name="ui_refresh_status">刷新状态</string>
+    <string name="ui_model_info">类别：%1$s • 大小：%2$d MB</string>
+
+    <!-- 文字识别页 -->
+    <string name="ui_ocr_title">文字识别</string>
+    <string name="ui_ocr_pick_image">选择图片</string>
+    <string name="ui_ocr_samples">示例图片</string>
+    <string name="ui_ocr_extracted">识别出的文字</string>
+    <string name="ui_ocr_no_text">图片中未检测到文字</string>
+    <string name="ui_ocr_edit_hint">编辑识别出的文字</string>
+
+    <!-- 应急页 -->
+    <string name="ui_sos_title">应急用语</string>
+    <string name="ui_emergency_categories">应急类别</string>
+    <string name="ui_speak">朗读</string>
+    <string name="ui_flashcard">抽认卡</string>
+    <string name="ui_close">关闭</string>
+
+    <!-- 历史页 -->
+    <string name="ui_history_title">历史记录</string>
+    <string name="ui_history_search">搜索历史记录</string>
+    <string name="ui_history_all">全部</string>
+    <string name="ui_history_voice">语音</string>
+    <string name="ui_history_text">文本</string>
+    <string name="ui_history_ocr">文字识别</string>
+    <string name="ui_history_pinned">已置顶</string>
+    <string name="ui_history_clear">清空历史记录</string>
+    <string name="ui_pin">置顶</string>
+    <string name="ui_unpin">取消置顶</string>
+    <string name="ui_replay">重播</string>
+    <string name="ui_no_history">暂无历史记录</string>
+
+    <!-- 通用状态 -->
+    <string name="ui_processing">处理中…</string>
+    <string name="ui_done">完成</string>
+    <string name="ui_error_generic">出现错误</string>
+
+    <!-- 通用 COUI 组件 -->
+    <string name="ui_from">源语言</string>
+    <string name="ui_to">目标语言</string>
+    <string name="ui_swap_languages">交换语言</string>
+    <string name="ui_beta_badge">BETA</string>
+    <string name="ui_retry">重试</string>
+    <string name="ui_error_title">出现问题</string>
+    <string name="ui_listening">正在聆听 — 点按停止</string>
+    <string name="ui_tap_to_speak">点按说话（%1$s）</string>
+    <string name="ui_emotion_unavailable">情绪：不可用</string>
+    <string name="ui_stop">停止</string>
+    <string name="ui_play_audio">播放音频</string>
+    <string name="ui_speaking">正在朗读…</string>
+    <string name="ui_copy">复制</string>
+    <string name="ui_ms">%1$d 毫秒</string>
+    <string name="ui_tts_latency">语音合成：%1$d 毫秒</string>
+
+    <!-- 模型提取状态 -->
+    <string name="ui_extracting_status">正在加载 %1$s（%2$d/%3$d）</string>
+    <string name="ui_models_ready">就绪 — 已提取 %1$d 个模型文件</string>
+    <string name="ui_extraction_idle">等待开始提取模型</string>
+    <string name="ui_status_unavailable">模型状态不可用</string>
+</resources>

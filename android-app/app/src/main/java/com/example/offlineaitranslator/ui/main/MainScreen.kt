@@ -3,13 +3,25 @@ package com.example.offlineaitranslator.ui.main
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -17,7 +29,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -25,30 +36,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -57,962 +47,1251 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation3.runtime.NavKey
-import com.example.offlineaitranslator.engine.EmotionResult
+import com.example.offlineaitranslator.R
+import com.example.offlineaitranslator.engine.EmergencyPhrasebook
 import com.example.offlineaitranslator.engine.ExtractionState
+import com.example.offlineaitranslator.engine.OcrSample
+import com.example.offlineaitranslator.engine.OfflineOcrEngine
 import com.example.offlineaitranslator.engine.SampleAudioItem
 import com.example.offlineaitranslator.engine.SupportedLanguage
+import com.example.offlineaitranslator.theme.CoUiTheme
+import com.example.offlineaitranslator.ui.coui.CoUiMotion
+import com.example.offlineaitranslator.ui.coui.CoUiBadge
+import com.example.offlineaitranslator.ui.coui.CoUiButton
+import com.example.offlineaitranslator.ui.coui.CoUiCard
+import com.example.offlineaitranslator.ui.coui.CoUiCardListGroup
+import com.example.offlineaitranslator.ui.coui.CoUiEmotionBadge
+import com.example.offlineaitranslator.ui.coui.CoUiErrorBanner
+import com.example.offlineaitranslator.ui.coui.CoUiCircularProgress
+import com.example.offlineaitranslator.ui.coui.CoUiIcon
+import com.example.offlineaitranslator.ui.coui.CoUiIconButton
+import com.example.offlineaitranslator.ui.coui.CoUiIconKind
+import com.example.offlineaitranslator.ui.coui.CoUiInfoBanner
+import com.example.offlineaitranslator.ui.coui.CoUiLanguageSelector
+import com.example.offlineaitranslator.ui.coui.CoUiListRow
+import com.example.offlineaitranslator.ui.coui.CoUiLocalizedTextPanel
+import com.example.offlineaitranslator.ui.coui.CoUiMicButton
+import com.example.offlineaitranslator.ui.coui.CoUiOutlinedButton
+import com.example.offlineaitranslator.ui.coui.CoUiProgressBanner
+import com.example.offlineaitranslator.ui.coui.CoUiScaffold
+import com.example.offlineaitranslator.ui.coui.CoUiSectionTitle
+import com.example.offlineaitranslator.ui.coui.CoUiStatusChip
+import com.example.offlineaitranslator.ui.coui.CoUiTabBar
+import com.example.offlineaitranslator.ui.coui.CoUiTextField
+import com.example.offlineaitranslator.ui.coui.CoUiTone
+import com.example.offlineaitranslator.ui.coui.CoUiText
+import com.example.offlineaitranslator.ui.coui.CoUiWaveform
+import com.example.offlineaitranslator.ui.coui.couiOverscroll
+import com.example.offlineaitranslator.ui.coui.allTranslationLanguages
+import com.example.offlineaitranslator.ui.coui.detectedEmotion
+import com.example.offlineaitranslator.ui.coui.extractionProgress
+import com.example.offlineaitranslator.ui.coui.extractionStatusText
+import com.example.offlineaitranslator.ui.coui.isExtractingModels
 
-@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun localizedError(message: String?): String = when (message) {
+    "ui_ocr_no_text" -> stringResource(R.string.ui_ocr_no_text)
+    else -> message ?: ""
+}
+
+/**
+ * COUI-styled main screen.
+ *
+ * Signature is unchanged so `Navigation.kt` keeps compiling. Every property of [MainUiState] and every
+ * event handler of [MainScreenViewModel] remains connected; only the visual layer was replaced.
+ */
 @Composable
 fun MainScreen(
     onItemClick: (NavKey) -> Unit,
     microphoneGranted: Boolean,
     onRequestMicrophone: () -> Unit,
     modifier: Modifier = Modifier,
-    viewModel: MainScreenViewModel = viewModel()
+    viewModel: MainScreenViewModel = viewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var selectedTabIndex by remember { mutableIntStateOf(0) }
     val context = LocalContext.current
+    // Each tab owns its scroll position: a tab can never inherit another tab's mid-scroll offset,
+    // and the collapsed top bar derives from whichever tab is currently visible.
+    val voiceScrollState = rememberScrollState()
+    val textScrollState = rememberScrollState()
+    val ocrScrollState = rememberScrollState()
+    val sosScrollState = rememberScrollState()
+    val historyScrollState = rememberScrollState()
+    val modelsScrollState = rememberScrollState()
+    val activeScrollState = when (selectedTabIndex) {
+        0 -> voiceScrollState
+        1 -> textScrollState
+        2 -> ocrScrollState
+        3 -> sosScrollState
+        4 -> historyScrollState
+        else -> modelsScrollState
+    }
+
+    // When a speech result finishes, glide the Voice tab down to the newly populated result card.
+    LaunchedEffect(uiState.isProcessingSpeech) {
+        if (!uiState.isProcessingSpeech && uiState.speechTranscript.isNotBlank()) {
+            voiceScrollState.animateScrollTo(voiceScrollState.maxValue)
+        }
+    }
 
     val audioPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
+        contract = ActivityResultContracts.GetContent(),
     ) { uri ->
         if (uri != null) {
             viewModel.processUploadedAudio(uri, context)
         }
     }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+    CoUiScaffold(
+        title = stringResource(R.string.ui_app_title),
+        modifier = modifier.fillMaxSize(),
+        subtitle = stringResource(R.string.ui_offline_subtitle),
+        privacyBadge = stringResource(R.string.ui_privacy_badge),
+        version = stringResource(R.string.ui_version),
+        scrollState = activeScrollState,
     ) {
-        // --- Clean Modern Header ---
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 1.dp
+        // First-launch model extraction progress / errors.
+        if (uiState.isExtractingModels && uiState.extractionState is ExtractionState.Extracting) {
+            CoUiProgressBanner(
+                progress = uiState.extractionProgress,
+                title = stringResource(R.string.ui_preparing_models) +
+                    " ${(uiState.extractionProgress * 100).toInt()}%",
+                detail = uiState.extractionStatusText(),
+            )
+        }
+        if (uiState.extractionState is ExtractionState.Error) {
+            CoUiErrorBanner(
+                message = stringResource(R.string.ui_model_setup_error, uiState.extractionStatusText()),
+                onRetry = { viewModel.startExtraction() },
+            )
+        }
+
+        CoUiTabBar(
+            items = listOf(
+                stringResource(R.string.ui_tab_voice),
+                stringResource(R.string.ui_tab_text),
+                stringResource(R.string.ui_tab_ocr),
+                stringResource(R.string.ui_tab_sos),
+                stringResource(R.string.ui_tab_history),
+                stringResource(R.string.ui_tab_models),
+            ),
+            selectedIndex = selectedTabIndex,
+            onTabSelected = { selectedTabIndex = it },
+            icons = listOf(
+                CoUiIconKind.MIC,
+                CoUiIconKind.CHECK,
+                CoUiIconKind.FOLDER,
+                CoUiIconKind.CLOSE,
+                CoUiIconKind.REFRESH,
+                CoUiIconKind.NEURAL,
+            ),
+        )
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .couiOverscroll(activeScrollState),
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1f, fill = false)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .background(Color(0xFF10B981), CircleShape)
+            AnimatedContent(
+                targetState = selectedTabIndex,
+                transitionSpec = {
+                    (
+                        fadeIn(animationSpec = tween(220, easing = CoUiMotion.CouiEase)) +
+                            slideInHorizontally(
+                                animationSpec = tween(280, easing = CoUiMotion.CouiMoveEase),
+                                initialOffsetX = { it / 10 },
+                            ) +
+                            scaleIn(
+                                animationSpec = tween(280, easing = CoUiMotion.CouiMoveEase),
+                                initialScale = 0.97f,
+                            )
+                        ) togetherWith (
+                        fadeOut(animationSpec = tween(140, easing = CoUiMotion.CouiInEase)) +
+                            slideOutHorizontally(
+                                animationSpec = tween(180, easing = CoUiMotion.CouiInEase),
+                                targetOffsetX = { -it / 14 },
+                            ) +
+                            scaleOut(
+                                animationSpec = tween(180, easing = CoUiMotion.CouiInEase),
+                                targetScale = 0.985f,
+                            )
+                        )
+                },
+                label = "coui-tab-content",
+            ) { tabIndex ->
+                when (tabIndex) {
+                    0 -> VoiceTab(
+                        uiState = uiState,
+                        scrollState = voiceScrollState,
+                        microphoneGranted = microphoneGranted,
+                        onRequestMicrophone = onRequestMicrophone,
+                        onPickAudio = { audioPickerLauncher.launch("audio/*") },
+                        onStartRecording = { viewModel.startRecording() },
+                        onStopRecording = { viewModel.stopRecording() },
+                        onSelectSample = { viewModel.processSampleAudio(it) },
+                        onPlaySample = { viewModel.playSampleAudio(it) },
+                        onPlaySynthesized = { viewModel.playSynthesizedSpeech() },
+                        onStopPlayback = { viewModel.stopAudioPlayback() },
+                        onSrcLangChanged = { viewModel.setSrcSpeechLang(it) },
+                        onTgtLangChanged = { viewModel.setTgtSpeechLang(it) },
+                        onSwapLangs = { viewModel.swapSpeechLangs() },
+                        onGrammarToggle = { viewModel.setGrammarCorrectionEnabled(it) },
                     )
-                    Spacer(Modifier.width(10.dp))
-                    Column {
-                        Text(
-                            text = "AI Voice & Text Translator",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = "Offline Mode • 33 Languages",
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
-                ) {
-                    Text(
-                        text = "v1.6",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                    1 -> TextTab(
+                        uiState = uiState,
+                        scrollState = textScrollState,
+                        onInputChanged = { viewModel.setInputText(it) },
+                        onTranslate = { viewModel.translateText() },
+                        onClear = { viewModel.clearInputText() },
+                        onSpeakText = { viewModel.speakTextTranslation() },
+                        onStopPlayback = { viewModel.stopAudioPlayback() },
+                        onSrcLangChanged = { viewModel.setSrcTextLang(it) },
+                        onTgtLangChanged = { viewModel.setTgtTextLang(it) },
+                        onSwapLangs = { viewModel.swapTextLangs() },
+                        onGrammarToggle = { viewModel.setGrammarCorrectionEnabled(it) },
+                    )
+                    2 -> OcrTab(
+                        uiState = uiState,
+                        scrollState = ocrScrollState,
+                        onOcrInputChanged = { viewModel.setOcrInputText(it) },
+                        onLoadSample = { viewModel.loadOcrSample(it) },
+                        onProcessOcrImage = { uri -> viewModel.processOcrImage(uri, context) },
+                        onCleanGrammar = { viewModel.cleanGrammar(it, "OCR") },
+                        onTranslateOcr = { viewModel.translateOcrText() },
+                        onSpeakOcr = {
+                            viewModel.speakPhrase(uiState.ocrTranslatedText, uiState.tgtTextLang)
+                        },
+                    )
+                    3 -> SosTab(
+                        uiState = uiState,
+                        scrollState = sosScrollState,
+                        onSelectCategory = { viewModel.setSelectedEmergencyCategory(it) },
+                        onSpeak = { viewModel.speakPhrase(it, SupportedLanguage.ENGLISH) },
+                        onFlashcard = { viewModel.showFlashcard(it) },
+                        onDismissFlashcard = { viewModel.dismissFlashcard() },
+                    )
+                    4 -> HistoryTab(
+                        uiState = uiState,
+                        scrollState = historyScrollState,
+                        onFilterChanged = { viewModel.setHistoryFilter(it) },
+                        onReplay = { text, code ->
+                            viewModel.speakPhrase(text, SupportedLanguage.fromCode(code))
+                        },
+                        onTogglePin = { viewModel.toggleHistoryPin(it) },
+                        onClear = { viewModel.clearHistory() },
+                    )
+                    5 -> ModelsTab(
+                        uiState = uiState,
+                        scrollState = modelsScrollState,
+                        onRefresh = { viewModel.refreshDiagnostics() },
                     )
                 }
             }
         }
-        HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
+    }
+    // `onItemClick` is intentionally unused: Navigation.kt declares a single destination.
+}
 
-        // --- Clean Tabs ---
-        TabRow(
-            selectedTabIndex = selectedTabIndex,
-            containerColor = MaterialTheme.colorScheme.surface,
-            contentColor = MaterialTheme.colorScheme.primary,
-            divider = {
-                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f), thickness = 1.dp)
-            }
-        ) {
-            Tab(
-                selected = selectedTabIndex == 0,
-                onClick = { selectedTabIndex = 0 },
-                text = {
-                    Text(
-                        "🎙️ Voice",
-                        fontWeight = if (selectedTabIndex == 0) FontWeight.Bold else FontWeight.Normal,
-                        fontSize = 13.sp
-                    )
-                }
-            )
-            Tab(
-                selected = selectedTabIndex == 1,
-                onClick = { selectedTabIndex = 1 },
-                text = {
-                    Text(
-                        "💬 Text",
-                        fontWeight = if (selectedTabIndex == 1) FontWeight.Bold else FontWeight.Normal,
-                        fontSize = 13.sp
-                    )
-                }
-            )
-            Tab(
-                selected = selectedTabIndex == 2,
-                onClick = { selectedTabIndex = 2 },
-                text = {
-                    Text(
-                        "⚙️ Models",
-                        fontWeight = if (selectedTabIndex == 2) FontWeight.Bold else FontWeight.Normal,
-                        fontSize = 13.sp
-                    )
-                }
-            )
-        }
-
-        // --- Setup Progress Banner (Only shown once on first launch) ---
-        when (val ext = uiState.extractionState) {
-            is ExtractionState.Extracting -> {
-                Card(
-                    modifier = Modifier.fillMaxWidth().padding(12.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.3f))
-                ) {
-                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        val pct = (ext.progress * 100).toInt()
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Preparing AI models ($pct%)", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                        }
-                        LinearProgressIndicator(
-                            progress = { ext.progress },
-                            modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp))
+/**
+ * Shared grammar toggle + cleaned-text preview, used by both the Voice and Text tabs.
+ */
+@Composable
+private fun GrammarCorrectionRows(
+    enabled: Boolean,
+    cleanedText: String,
+    onToggle: (Boolean) -> Unit,
+) {
+    CoUiCardListGroup(
+        items = listOf(
+            @Composable {
+                CoUiListRow(
+                    title = stringResource(R.string.ui_grammar_correction),
+                    modifier = Modifier.clickable { onToggle(!enabled) },
+                    endActions = {
+                        CoUiBadge(
+                            text = stringResource(if (enabled) R.string.ui_on else R.string.ui_off),
+                            tone = if (enabled) CoUiTone.SUCCESS else CoUiTone.PRIMARY,
                         )
-                        Text(
-                            "Loading: ${ext.currentFile} (${ext.filesExtracted}/${ext.totalFiles})",
-                            fontSize = 11.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-            }
-            is ExtractionState.Error -> {
-                Card(
-                    modifier = Modifier.fillMaxWidth().padding(12.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.3f))
-                ) {
-                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("Model Setup Error", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
-                        Text(ext.message, fontSize = 12.sp)
-                        Button(onClick = { viewModel.startExtraction() }, shape = RoundedCornerShape(8.dp)) {
-                            Text("Retry")
-                        }
-                    }
-                }
-            }
-            else -> {}
-        }
+                    },
+                )
+            },
+            @Composable {
+                CoUiListRow(
+                    title = stringResource(R.string.ui_grammar_cleaned),
+                    summary = cleanedText.ifBlank { null },
+                )
+            },
+        ),
+    )
+}
 
-        // --- Tab Contents ---
-        Box(modifier = Modifier.fillMaxSize()) {
-            when (selectedTabIndex) {
-                0 -> VoiceAndAudioTab(
-                    uiState = uiState,
-                    microphoneGranted = microphoneGranted,
-                    onRequestMicrophone = onRequestMicrophone,
-                    onPickAudio = { audioPickerLauncher.launch("audio/*") },
-                    onStartRecording = { viewModel.startRecording() },
-                    onStopRecording = { viewModel.stopRecording() },
-                    onSelectSample = { viewModel.processSampleAudio(it) },
-                    onPlaySynthesized = { viewModel.playSynthesizedSpeech() },
-                    onSrcLangChanged = { viewModel.setSrcSpeechLang(it) },
-                    onTgtLangChanged = { viewModel.setTgtSpeechLang(it) },
-                    onSwapLangs = { viewModel.swapSpeechLangs() }
-                )
-                1 -> TextTranslationTab(
-                    uiState = uiState,
-                    onInputChanged = { viewModel.setInputText(it) },
-                    onTranslate = { viewModel.translateText() },
-                    onClear = { viewModel.clearInputText() },
-                    onSpeakText = { viewModel.speakTextTranslation() },
-                    onSrcLangChanged = { viewModel.setSrcTextLang(it) },
-                    onTgtLangChanged = { viewModel.setTgtTextLang(it) },
-                    onSwapLangs = { viewModel.swapTextLangs() }
-                )
-                2 -> DiagnosticsTab(
-                    uiState = uiState,
-                    onRefresh = { viewModel.refreshDiagnostics() }
-                )
-            }
+/** Decode an image Uri into a downsampled bitmap so the preview never allocates a full-size image. */
+private fun decodeDownsampledBitmap(context: Context, uri: Uri): Bitmap? {
+    return try {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        context.contentResolver.openInputStream(uri)?.use { stream ->
+            BitmapFactory.decodeStream(stream, null, bounds)
         }
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+        val maxDimension = 1024
+        var sampleSize = 1
+        while (maxOf(bounds.outWidth, bounds.outHeight) / sampleSize > maxDimension) {
+            sampleSize *= 2
+        }
+        val options = BitmapFactory.Options().apply { inSampleSize = sampleSize }
+        context.contentResolver.openInputStream(uri)?.use { stream ->
+            BitmapFactory.decodeStream(stream, null, options)
+        }
+    } catch (t: Throwable) {
+        null
     }
 }
 
 @Composable
-private fun VoiceAndAudioTab(
+private fun VoiceTab(
     uiState: MainUiState,
+    scrollState: ScrollState,
     microphoneGranted: Boolean,
     onRequestMicrophone: () -> Unit,
     onPickAudio: () -> Unit,
     onStartRecording: () -> Unit,
     onStopRecording: () -> Unit,
     onSelectSample: (SampleAudioItem) -> Unit,
+    onPlaySample: (SampleAudioItem) -> Unit,
     onPlaySynthesized: () -> Unit,
+    onStopPlayback: () -> Unit,
     onSrcLangChanged: (SupportedLanguage) -> Unit,
     onTgtLangChanged: (SupportedLanguage) -> Unit,
-    onSwapLangs: () -> Unit
+    onSwapLangs: () -> Unit,
+    onGrammarToggle: (Boolean) -> Unit,
 ) {
-    val scrollState = rememberScrollState()
     val context = LocalContext.current
+
+    // MainScreenViewModel emits fixed English placeholders for no-speech results. Resolve those
+    // sentinels to localized COUI copy here so the Voice tab is bilingual without changing the
+    // ViewModel's public contract. Sentinel resources stay identical in every locale on purpose.
+    val noSpeechText = stringResource(R.string.ui_no_speech)
+    val speakClearlyText = stringResource(R.string.ui_please_speak_clearly)
+    val noSpeechSentinel = stringResource(R.string.ui_no_speech_sentinel)
+    val speakClearlySentinel = stringResource(R.string.ui_speak_clearly_sentinel)
+    val localizedSpeechText: (String) -> String = { text ->
+        when (text) {
+            noSpeechSentinel -> noSpeechText
+            speakClearlySentinel -> speakClearlyText
+            else -> text
+        }
+    }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(scrollState)
-            .padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        LanguageSelectorBar(
+        CoUiLanguageSelector(
             srcLang = uiState.srcSpeechLang,
             tgtLang = uiState.tgtSpeechLang,
-            onSrcLangSelected = onSrcLangChanged,
-            onTgtLangSelected = onTgtLangChanged,
+            sourceLanguages = SupportedLanguage.speechSourceLanguages,
+            targetLanguages = SupportedLanguage.allTranslationLanguages,
+            onSrcSelected = onSrcLangChanged,
+            onTgtSelected = onTgtLangChanged,
             onSwap = onSwapLangs,
-            isSpeechMode = true
         )
 
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        text = "Voice Translation",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = "Tap the microphone to speak or choose a sample",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+        if (uiState.speechTranscript.isNotBlank()) {
+            GrammarCorrectionRows(
+                enabled = uiState.grammarCorrectionEnabled,
+                cleanedText = uiState.voiceGrammarCleanedText,
+                onToggle = onGrammarToggle,
+            )
+        }
+
+        CoUiCard {
+            CoUiSectionTitle(text = stringResource(R.string.ui_voice_translation))
+            CoUiText(
+                text = stringResource(R.string.ui_voice_hint),
+                style = CoUiTheme.textStyles.bodyXS,
+                color = CoUiTheme.colors.labelSecondary,
+            )
+            Spacer(Modifier.height(12.dp))
+
+            if (!microphoneGranted) {
+                CoUiButton(
+                    text = stringResource(R.string.ui_grant_mic),
+                    onClick = onRequestMicrophone,
+                    modifier = Modifier.fillMaxWidth(),
+                    icon = CoUiIconKind.MIC,
+                )
+            } else {
+                CoUiMicButton(
+                    isRecording = uiState.isRecording,
+                    isProcessing = uiState.isProcessingSpeech,
+                    languageLabel = uiState.srcSpeechLang.displayName,
+                    onClick = {
+                        if (uiState.isRecording) onStopRecording() else onStartRecording()
+                    },
+                )
+                if (uiState.isRecording) {
+                    Spacer(Modifier.height(8.dp))
+                    CoUiWaveform(isRecording = true)
                 }
+            }
 
-                if (!microphoneGranted) {
-                    Button(
-                        onClick = onRequestMicrophone,
-                        modifier = Modifier.fillMaxWidth().height(48.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                    ) {
-                        Text("🎙️ Grant Microphone Access", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                    }
-                } else {
-                    TactileVintageMicButton(
-                        isRecording = uiState.isRecording,
-                        isProcessing = uiState.isProcessingSpeech,
-                        onClick = {
-                            if (uiState.isRecording) {
-                                onStopRecording()
-                            } else {
-                                onStartRecording()
-                            }
-                        },
-                        languageLabel = uiState.srcSpeechLang.displayName
-                    )
+            Spacer(Modifier.height(8.dp))
+            CoUiOutlinedButton(
+                text = stringResource(R.string.ui_choose_audio),
+                onClick = onPickAudio,
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !uiState.isRecording && !uiState.isProcessingSpeech,
+                icon = CoUiIconKind.FOLDER,
+            )
+            CoUiText(
+                text = stringResource(R.string.ui_audio_formats),
+                style = CoUiTheme.textStyles.bodyXS,
+                color = CoUiTheme.colors.labelTertiary,
+            )
 
-                    if (uiState.isRecording) {
-                        AudioWaveformVisualizer(isRecording = true)
-                    }
-                }
-
-                OutlinedButton(
-                    onClick = onPickAudio,
-                    enabled = !uiState.isRecording && !uiState.isProcessingSpeech,
-                    modifier = Modifier.fillMaxWidth().height(44.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
+            if (uiState.sampleAudios.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                CoUiSectionTitle(text = stringResource(R.string.ui_sample_audio))
+                Spacer(Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("📁 Choose Audio File (WAV, MP3, M4A)", fontWeight = FontWeight.Medium, fontSize = 13.sp)
-                }
-
-                if (uiState.sampleAudios.isNotEmpty()) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Text(
-                            "Or test with sample audio:",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                    uiState.sampleAudios.forEach { sample ->
+                        CoUiBadge(
+                            text = sample.title,
+                            tone = if (uiState.selectedAudioName == sample.title) CoUiTone.PRIMARY else CoUiTone.NEUTRAL,
+                            modifier = Modifier.clickable(
+                                enabled = !uiState.isRecording && !uiState.isProcessingSpeech,
+                                onClick = { onSelectSample(sample) },
+                            ),
                         )
-                        Row(
-                            modifier = Modifier.horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            uiState.sampleAudios.forEach { sample ->
-                                FilterChip(
-                                    selected = uiState.selectedAudioName == sample.title,
-                                    onClick = { onSelectSample(sample) },
-                                    label = { Text(sample.title, fontSize = 12.sp) },
-                                    shape = RoundedCornerShape(10.dp)
-                                )
-                            }
-                        }
+                        CoUiIconButton(
+                            icon = CoUiIconKind.PLAY,
+                            contentDescription = stringResource(R.string.ui_play_sample, sample.title),
+                            onClick = { onPlaySample(sample) },
+                            enabled = !uiState.isPlayingAudio,
+                        )
                     }
                 }
             }
         }
 
         AnimatedVisibility(visible = uiState.isProcessingSpeech) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f)),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.25f))
-            ) {
-                Row(
-                    modifier = Modifier.padding(14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.5.dp)
+            CoUiCard {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CoUiCircularProgress(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.5.dp,
+                        color = CoUiTheme.colors.primaryText,
+                    )
+                    Spacer(Modifier.width(10.dp))
                     Column {
-                        Text("Translating speech...", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                        Text(
-                            "Generating translation locally",
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f)
+                        CoUiText(
+                            text = stringResource(R.string.ui_translating_speech),
+                            style = CoUiTheme.textStyles.bodyM,
+                            color = CoUiTheme.colors.labelPrimary,
+                        )
+                        CoUiText(
+                            text = stringResource(R.string.ui_generating_local),
+                            style = CoUiTheme.textStyles.bodyXS,
+                            color = CoUiTheme.colors.labelSecondary,
                         )
                     }
                 }
             }
         }
 
-        if (uiState.speechTranscript.isNotBlank() || uiState.speechTranslation.isNotBlank() || uiState.emotionResult != null) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
-            ) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = uiState.selectedAudioName ?: "Recognized Output",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f)
+        if (uiState.speechTranscript.isNotBlank() ||
+            uiState.speechTranslation.isNotBlank() ||
+            uiState.detectedEmotion != null
+        ) {
+            CoUiCard {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    CoUiText(
+                        text = uiState.selectedAudioName ?: stringResource(R.string.ui_recognized_output),
+                        style = CoUiTheme.textStyles.headlineXS,
+                        color = CoUiTheme.colors.labelPrimary,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    CoUiEmotionBadge(emotion = uiState.detectedEmotion)
+                }
+
+                Spacer(Modifier.height(10.dp))
+
+                // Source transcript + detected language.
+                val effectiveSrc = if (
+                    uiState.srcSpeechLang == SupportedLanguage.AUTO_DETECT &&
+                    uiState.detectedSpeechLang != null
+                ) {
+                    uiState.detectedSpeechLang
+                } else {
+                    uiState.srcSpeechLang
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    CoUiText(
+                        text = stringResource(R.string.ui_speech_input, effectiveSrc.displayName),
+                        style = CoUiTheme.textStyles.bodyS,
+                        color = CoUiTheme.colors.primaryText,
+                    )
+                    if (uiState.asrLatencyMs > 0) {
+                        CoUiText(
+                            text = stringResource(R.string.ui_ms, uiState.asrLatencyMs),
+                            style = CoUiTheme.textStyles.bodyXS,
+                            color = CoUiTheme.colors.labelTertiary,
                         )
-
-                        uiState.emotionResult?.let { emo ->
-                            EmotionBadge(emotion = emo)
-                        }
                     }
+                }
+                Spacer(Modifier.height(4.dp))
+                CoUiLocalizedTextPanel(
+                    text = if (uiState.speechTranscript.isEmpty()) {
+                        noSpeechText
+                    } else {
+                        localizedSpeechText(uiState.speechTranscript)
+                    },
+                    rtl = effectiveSrc.isRtl,
+                    tone = CoUiTone.NEUTRAL,
+                )
+                if (uiState.audioDurationSec > 0f) {
+                    Spacer(Modifier.height(4.dp))
+                    CoUiText(
+                        text = stringResource(
+                            R.string.ui_audio_duration,
+                            "%.1f".format(uiState.audioDurationSec),
+                        ),
+                        style = CoUiTheme.textStyles.bodyXS,
+                        color = CoUiTheme.colors.labelTertiary,
+                    )
+                }
 
-                    HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
+                Spacer(Modifier.height(10.dp))
 
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                val label = if (uiState.srcSpeechLang == SupportedLanguage.AUTO_DETECT && uiState.detectedSpeechLang != null) {
-                                    "Speech Input (${uiState.detectedSpeechLang.displayName}):"
-                                } else {
-                                    "Speech Input (${uiState.srcSpeechLang.displayName}):"
-                                }
-                                Text(
-                                    text = label,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                                if (uiState.srcSpeechLang == SupportedLanguage.AUTO_DETECT && uiState.detectedSpeechLang != null) {
-                                    Spacer(Modifier.width(6.dp))
-                                    Surface(
-                                        shape = RoundedCornerShape(6.dp),
-                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f))
-                                    ) {
-                                        Text(
-                                            text = "✨ ${uiState.detectedSpeechLang.displayName}",
-                                            fontSize = 10.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                        )
-                                    }
-                                }
-                            }
-                            if (uiState.asrLatencyMs > 0) {
-                                Text("${uiState.asrLatencyMs} ms", fontSize = 11.sp, color = MaterialTheme.colorScheme.outline)
-                            }
-                        }
-                        val srcRtl = uiState.srcSpeechLang.isRtl
-                        val srcLayoutDir = if (srcRtl) LayoutDirection.Rtl else LayoutDirection.Ltr
-                        CompositionLocalProvider(LocalLayoutDirection provides srcLayoutDir) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
-                                    .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.15f), RoundedCornerShape(10.dp))
-                                    .padding(12.dp)
-                            ) {
-                                Text(
-                                    text = if (uiState.speechTranscript.isEmpty()) "(No speech detected)" else uiState.speechTranscript,
-                                    fontSize = 15.sp,
-                                    lineHeight = 21.sp,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            }
-                        }
+                // Translated text.
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    CoUiText(
+                        text = stringResource(R.string.ui_translation_label, uiState.tgtSpeechLang.displayName),
+                        style = CoUiTheme.textStyles.bodyS,
+                        color = CoUiTheme.colors.primaryText,
+                    )
+                    if (uiState.speechTransLatencyMs > 0) {
+                        CoUiText(
+                            text = stringResource(R.string.ui_ms, uiState.speechTransLatencyMs),
+                            style = CoUiTheme.textStyles.bodyXS,
+                            color = CoUiTheme.colors.labelTertiary,
+                        )
                     }
+                }
+                Spacer(Modifier.height(4.dp))
+                CoUiLocalizedTextPanel(
+                    text = if (uiState.speechTranslation.isEmpty()) {
+                        stringResource(R.string.ui_no_translation)
+                    } else {
+                        localizedSpeechText(uiState.speechTranslation)
+                    },
+                    rtl = uiState.tgtSpeechLang.isRtl,
+                    tone = CoUiTone.PRIMARY,
+                )
 
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                "Translation (${uiState.tgtSpeechLang.displayName}):",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.secondary
-                            )
-                            if (uiState.speechTransLatencyMs > 0) {
-                                Text("${uiState.speechTransLatencyMs} ms", fontSize = 11.sp, color = MaterialTheme.colorScheme.outline)
-                            }
-                        }
-                        val tgtRtl = uiState.tgtSpeechLang.isRtl
-                        val tgtLayoutDir = if (tgtRtl) LayoutDirection.Rtl else LayoutDirection.Ltr
-                        CompositionLocalProvider(LocalLayoutDirection provides tgtLayoutDir) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
-                                    .border(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.25f), RoundedCornerShape(10.dp))
-                                    .padding(12.dp)
-                            ) {
-                                Text(
-                                    text = if (uiState.speechTranslation.isEmpty()) "(No translation generated)" else uiState.speechTranslation,
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    lineHeight = 22.sp,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            }
-                        }
-                    }
-
-                    if (uiState.hasSynthesizedAudio || uiState.speechTranslation.isNotBlank()) {
-                        Button(
+                if (uiState.hasSynthesizedAudio || uiState.speechTranslation.isNotBlank()) {
+                    Spacer(Modifier.height(10.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        CoUiButton(
+                            text = stringResource(
+                                if (uiState.isPlayingAudio) R.string.ui_speaking else R.string.ui_play_audio,
+                            ),
                             onClick = onPlaySynthesized,
+                            modifier = Modifier.weight(1f),
                             enabled = !uiState.isPlayingAudio,
-                            modifier = Modifier.fillMaxWidth().height(46.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
-                        ) {
-                            Text(
-                                if (uiState.isPlayingAudio) "🔊 Speaking..." else "🔊 Play Audio",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp
+                            icon = CoUiIconKind.PLAY,
+                        )
+                        if (uiState.isPlayingAudio) {
+                            CoUiOutlinedButton(
+                                text = stringResource(R.string.ui_stop),
+                                onClick = onStopPlayback,
+                                icon = CoUiIconKind.STOP,
                             )
                         }
                     }
-
-                    uiState.ttsNote?.let { note ->
-                        Text(
-                            text = note,
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
+                    if (uiState.ttsLatencyMs > 0) {
+                        CoUiText(
+                            text = stringResource(R.string.ui_tts_latency, uiState.ttsLatencyMs),
+                            style = CoUiTheme.textStyles.bodyXS,
+                            color = CoUiTheme.colors.labelTertiary,
                         )
                     }
+                }
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End
-                    ) {
-                        OutlinedButton(
-                            onClick = {
-                                val textToCopy = "Original: ${uiState.speechTranscript}\nTranslation: ${uiState.speechTranslation}"
-                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                clipboard.setPrimaryClip(ClipData.newPlainText("AI Translation", textToCopy))
-                                Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
-                            },
-                            shape = RoundedCornerShape(10.dp),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
-                        ) {
-                            Text("📋 Copy", fontSize = 12.sp)
-                        }
-                    }
+                val copyText = stringResource(
+                    R.string.ui_copy_text,
+                    uiState.speechTranscript,
+                    uiState.speechTranslation,
+                )
+                val copyLabel = stringResource(R.string.ui_copy_label_ai)
+                val copiedToast = stringResource(R.string.ui_copied_clipboard)
+                Spacer(Modifier.height(8.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    CoUiOutlinedButton(
+                        text = stringResource(R.string.ui_copy),
+                        onClick = {
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            clipboard.setPrimaryClip(ClipData.newPlainText(copyLabel, copyText))
+                            Toast.makeText(context, copiedToast, Toast.LENGTH_SHORT).show()
+                        },
+                        icon = CoUiIconKind.COPY,
+                    )
                 }
             }
         }
 
-        uiState.errorMessage?.let { err ->
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.3f))
-            ) {
-                Text(err, modifier = Modifier.padding(14.dp), color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
-            }
+        uiState.ttsNote?.let { note ->
+            CoUiInfoBanner(text = stringResource(R.string.ui_tts_note, note))
         }
+        uiState.errorMessage?.let { error -> CoUiErrorBanner(message = localizedError(error)) }
     }
 }
 
 @Composable
-private fun TextTranslationTab(
+private fun TextTab(
     uiState: MainUiState,
+    scrollState: ScrollState,
     onInputChanged: (String) -> Unit,
     onTranslate: () -> Unit,
     onClear: () -> Unit,
     onSpeakText: () -> Unit,
+    onStopPlayback: () -> Unit,
     onSrcLangChanged: (SupportedLanguage) -> Unit,
     onTgtLangChanged: (SupportedLanguage) -> Unit,
-    onSwapLangs: () -> Unit
+    onSwapLangs: () -> Unit,
+    onGrammarToggle: (Boolean) -> Unit,
 ) {
     val context = LocalContext.current
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+            .verticalScroll(scrollState)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        LanguageSelectorBar(
+        CoUiLanguageSelector(
             srcLang = uiState.srcTextLang,
             tgtLang = uiState.tgtTextLang,
-            onSrcLangSelected = onSrcLangChanged,
-            onTgtLangSelected = onTgtLangChanged,
+            sourceLanguages = SupportedLanguage.allTranslationLanguages,
+            targetLanguages = SupportedLanguage.allTranslationLanguages,
+            onSrcSelected = onSrcLangChanged,
+            onTgtSelected = onTgtLangChanged,
             onSwap = onSwapLangs,
-            isSpeechMode = false
         )
 
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
-        ) {
-            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                val srcRtl = uiState.srcTextLang.isRtl
-                val srcLayoutDir = if (srcRtl) LayoutDirection.Rtl else LayoutDirection.Ltr
-                CompositionLocalProvider(LocalLayoutDirection provides srcLayoutDir) {
-                    OutlinedTextField(
-                        value = uiState.inputText,
-                        onValueChange = onInputChanged,
-                        label = { Text("Enter text to translate (${uiState.srcTextLang.displayName})") },
-                        modifier = Modifier.fillMaxWidth().height(120.dp),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                }
+        CoUiCard {
+            CoUiTextField(
+                value = uiState.inputText,
+                onValueChange = onInputChanged,
+                label = stringResource(R.string.ui_enter_text, uiState.srcTextLang.displayName),
+                modifier = Modifier.height(120.dp),
+            )
+            Spacer(Modifier.height(10.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                CoUiOutlinedButton(
+                    text = stringResource(R.string.ui_clear),
+                    onClick = onClear,
+                    icon = CoUiIconKind.CLOSE,
+                )
+                CoUiButton(
+                    text = stringResource(R.string.ui_translate),
+                    onClick = onTranslate,
+                    enabled = uiState.inputText.isNotBlank(),
+                    loading = uiState.isTranslating,
+                    icon = CoUiIconKind.CHECK,
+                )
+            }
+        }
 
+        GrammarCorrectionRows(
+            enabled = uiState.grammarCorrectionEnabled,
+            cleanedText = uiState.textGrammarCleanedText,
+            onToggle = onGrammarToggle,
+        )
+
+        if (uiState.translatedText.isNotBlank()) {
+            CoUiCard {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    OutlinedButton(
-                        onClick = onClear,
-                        shape = RoundedCornerShape(10.dp),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
-                    ) {
-                        Text("Clear", fontSize = 12.sp)
+                    CoUiText(
+                        text = stringResource(R.string.ui_target_translation, uiState.tgtTextLang.displayName),
+                        style = CoUiTheme.textStyles.headlineXS,
+                        color = CoUiTheme.colors.labelPrimary,
+                    )
+                    CoUiBadge(
+                        text = stringResource(R.string.ui_ms, uiState.latencyMs),
+                        tone = CoUiTone.INFO,
+                    )
+                }
+                Spacer(Modifier.height(4.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    CoUiBadge(
+                        text = translationTier(uiState.latencyMs, uiState.tokensGenerated),
+                        tone = CoUiTone.PRIMARY,
+                    )
+                    CoUiStatusChip(
+                        text = stringResource(R.string.ui_tokens, uiState.tokensGenerated),
+                        active = uiState.tokensGenerated > 0,
+                    )
+                }
+                Spacer(Modifier.height(10.dp))
+                CoUiLocalizedTextPanel(
+                    text = uiState.translatedText,
+                    rtl = uiState.tgtTextLang.isRtl,
+                    tone = CoUiTone.PRIMARY,
+                )
+                Spacer(Modifier.height(10.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                ) {
+                    CoUiButton(
+                        text = stringResource(
+                            if (uiState.isPlayingAudio) R.string.ui_speaking else R.string.ui_play_audio,
+                        ),
+                        onClick = onSpeakText,
+                        enabled = !uiState.isPlayingAudio,
+                        icon = CoUiIconKind.PLAY,
+                    )
+                    if (uiState.isPlayingAudio) {
+                        CoUiOutlinedButton(
+                            text = stringResource(R.string.ui_stop),
+                            onClick = onStopPlayback,
+                            icon = CoUiIconKind.STOP,
+                        )
                     }
-
-                    Button(
-                        onClick = onTranslate,
-                        enabled = uiState.inputText.isNotBlank() && !uiState.isTranslating,
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.height(42.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                    ) {
-                        if (uiState.isTranslating) {
-                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.White)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Translating...")
-                        } else {
-                            Text("Translate", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                        }
-                    }
+                    val copyLabel = stringResource(R.string.ui_copy_label_translation)
+                    val copiedToast = stringResource(R.string.ui_copied_translation)
+                    CoUiOutlinedButton(
+                        text = stringResource(R.string.ui_copy),
+                        onClick = {
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            clipboard.setPrimaryClip(ClipData.newPlainText(copyLabel, uiState.translatedText))
+                            Toast.makeText(context, copiedToast, Toast.LENGTH_SHORT).show()
+                        },
+                        icon = CoUiIconKind.COPY,
+                    )
                 }
             }
         }
 
-        if (uiState.translatedText.isNotBlank()) {
-            Card(
+        uiState.errorMessage?.let { error -> CoUiErrorBanner(message = localizedError(error)) }
+    }
+}
+
+@Composable
+private fun translationTier(latencyMs: Long, tokensGenerated: Int): String =
+    when {
+        latencyMs <= 2L && tokensGenerated == 0 -> stringResource(R.string.ui_tier_cache)
+        tokensGenerated > 0 -> stringResource(R.string.ui_tier_engine)
+        else -> stringResource(R.string.ui_tier_phrasebook)
+    }
+
+/**
+ * OCR tab: import/downsample an image, preview it, pick a built-in offline sample, edit the
+ * extracted text, then clean / translate / speak it.
+ */
+@Composable
+private fun OcrTab(
+    uiState: MainUiState,
+    scrollState: ScrollState,
+    onOcrInputChanged: (String) -> Unit,
+    onLoadSample: (OcrSample) -> Unit,
+    onProcessOcrImage: (Uri) -> Unit,
+    onCleanGrammar: (String) -> Unit,
+    onTranslateOcr: () -> Unit,
+    onSpeakOcr: () -> Unit,
+) {
+    val context = LocalContext.current
+    var previewBitmap by remember { mutableStateOf<Bitmap?>(null) }
+    var decodeFailed by remember { mutableStateOf(false) }
+
+    val ocrPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent(),
+    ) { uri ->
+        if (uri != null) {
+            val decoded = decodeDownsampledBitmap(context, uri)
+            if (decoded != null) {
+                decodeFailed = false
+                previewBitmap = decoded
+                // Real bundled ML Kit OCR — never a canned sample for a picked image.
+                onProcessOcrImage(uri)
+            } else {
+                decodeFailed = true
+            }
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(scrollState)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        CoUiCard {
+            CoUiSectionTitle(text = stringResource(R.string.ui_ocr_title))
+            Spacer(Modifier.height(10.dp))
+            CoUiButton(
+                text = stringResource(R.string.ui_ocr_pick_image),
+                onClick = { ocrPickerLauncher.launch("image/*") },
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.3f))
+                icon = CoUiIconKind.FOLDER,
+            )
+        }
+
+        if (decodeFailed) {
+            CoUiErrorBanner(message = stringResource(R.string.ui_error_generic))
+        }
+
+        previewBitmap?.let { bitmap ->
+            CoUiCard {
+                Image(
+                    bitmap = bitmap.asImageBitmap(),
+                    contentDescription = stringResource(R.string.ui_ocr_extracted),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(160.dp),
+                    contentScale = ContentScale.Fit,
+                )
+            }
+        }
+
+        CoUiCard {
+            CoUiSectionTitle(text = stringResource(R.string.ui_ocr_samples))
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            "${uiState.tgtTextLang.displayName} Translation:",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
-                            color = MaterialTheme.colorScheme.secondary
+                OfflineOcrEngine.SAMPLES.forEach { sample ->
+                    CoUiBadge(
+                        text = sample.title,
+                        tone = if (uiState.selectedOcrSampleId == sample.id) {
+                            CoUiTone.PRIMARY
+                        } else {
+                            CoUiTone.NEUTRAL
+                        },
+                        modifier = Modifier.clickable { onLoadSample(sample) },
+                    )
+                }
+            }
+        }
+
+        CoUiCard {
+            CoUiTextField(
+                value = uiState.ocrInputText,
+                onValueChange = onOcrInputChanged,
+                label = stringResource(R.string.ui_ocr_edit_hint),
+                modifier = Modifier.height(140.dp),
+            )
+            Spacer(Modifier.height(10.dp))
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                CoUiOutlinedButton(
+                    text = stringResource(R.string.ui_grammar_correction),
+                    onClick = { onCleanGrammar(uiState.ocrInputText) },
+                    modifier = Modifier.fillMaxWidth(),
+                    icon = CoUiIconKind.CHECK,
+                )
+                CoUiButton(
+                    text = stringResource(R.string.ui_translate),
+                    onClick = onTranslateOcr,
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = uiState.ocrInputText.isNotBlank(),
+                    icon = CoUiIconKind.CHECK,
+                )
+                CoUiButton(
+                    text = stringResource(R.string.ui_speak),
+                    onClick = onSpeakOcr,
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = uiState.ocrTranslatedText.isNotBlank(),
+                    icon = CoUiIconKind.PLAY,
+                )
+            }
+        }
+
+        CoUiCard {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                CoUiSectionTitle(text = stringResource(R.string.ui_ocr_extracted))
+                CoUiBadge(
+                    text = stringResource(
+                        when {
+                            uiState.isProcessingOcr -> R.string.ui_processing
+                            uiState.ocrTranslatedText.isNotBlank() -> R.string.ui_done
+                            else -> R.string.ui_error_generic
+                        },
+                    ),
+                    tone = if (uiState.isProcessingOcr) CoUiTone.WARNING else CoUiTone.SUCCESS,
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            CoUiCardListGroup(
+                items = listOf(
+                    @Composable {
+                        CoUiListRow(
+                            title = stringResource(R.string.ui_grammar_cleaned),
+                            summary = uiState.ocrGrammarCleanedText.ifBlank { null },
                         )
-                        if (uiState.latencyMs > 0) {
-                            Text("${uiState.latencyMs} ms", fontSize = 11.sp, color = MaterialTheme.colorScheme.outline)
-                        }
-                    }
+                    },
+                    @Composable {
+                        CoUiListRow(
+                            title = stringResource(R.string.ui_ocr_extracted),
+                            summary = uiState.ocrTranslatedText.ifBlank { null },
+                        )
+                    },
+                ),
+            )
+        }
 
-                    val tgtRtl = uiState.tgtTextLang.isRtl
-                    val tgtLayoutDir = if (tgtRtl) LayoutDirection.Rtl else LayoutDirection.Ltr
-                    CompositionLocalProvider(LocalLayoutDirection provides tgtLayoutDir) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
-                                .border(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.2f), RoundedCornerShape(10.dp))
-                                .padding(12.dp)
-                        ) {
-                            Text(
-                                text = uiState.translatedText,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Medium,
-                                lineHeight = 22.sp,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.fillMaxWidth()
+        uiState.errorMessage?.let { error -> CoUiErrorBanner(message = localizedError(error)) }
+    }
+}
+
+/** SOS tab: offline emergency phrasebook with category chips, speak actions and flashcards. */
+@Composable
+private fun SosTab(
+    uiState: MainUiState,
+    scrollState: ScrollState,
+    onSelectCategory: (String) -> Unit,
+    onSpeak: (String) -> Unit,
+    onFlashcard: (String) -> Unit,
+    onDismissFlashcard: () -> Unit,
+) {
+    val phrases = EmergencyPhrasebook.phrasesFor(uiState.selectedEmergencyCategory)
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(scrollState)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        CoUiCard {
+            CoUiSectionTitle(text = stringResource(R.string.ui_sos_title))
+            Spacer(Modifier.height(12.dp))
+            CoUiSectionTitle(text = stringResource(R.string.ui_emergency_categories))
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                EmergencyPhrasebook.CATEGORIES.forEach { category ->
+                    CoUiBadge(
+                        text = category,
+                        tone = if (uiState.selectedEmergencyCategory == category) {
+                            CoUiTone.PRIMARY
+                        } else {
+                            CoUiTone.NEUTRAL
+                        },
+                        modifier = Modifier.clickable { onSelectCategory(category) },
+                    )
+                }
+            }
+        }
+
+        CoUiCardListGroup(
+            items = phrases.map { phrase ->
+                @Composable {
+                    CoUiListRow(
+                        title = phrase.english,
+                        endActions = {
+                            CoUiIconButton(
+                                icon = CoUiIconKind.PLAY,
+                                contentDescription = stringResource(R.string.ui_speak),
+                                onClick = { onSpeak(phrase.english) },
                             )
-                        }
-                    }
+                            Spacer(Modifier.width(8.dp))
+                            CoUiBadge(
+                                text = stringResource(R.string.ui_flashcard),
+                                tone = CoUiTone.PRIMARY,
+                                modifier = Modifier.clickable { onFlashcard(phrase.english) },
+                            )
+                        },
+                    )
+                }
+            },
+        )
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Button(
-                            onClick = onSpeakText,
-                            enabled = !uiState.isPlayingAudio && uiState.translatedText.isNotBlank(),
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
-                        ) {
-                            Text(if (uiState.isPlayingAudio) "🔊 Speaking..." else "🔊 Play Audio", fontSize = 12.sp)
-                        }
-                        OutlinedButton(
-                            onClick = {
-                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                clipboard.setPrimaryClip(ClipData.newPlainText("Translation", uiState.translatedText))
-                                Toast.makeText(context, "Copied translation", Toast.LENGTH_SHORT).show()
-                            },
-                            shape = RoundedCornerShape(10.dp),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
-                        ) {
-                            Text("📋 Copy", fontSize = 12.sp)
-                        }
-                    }
+        uiState.errorMessage?.let { error -> CoUiErrorBanner(message = localizedError(error)) }
+    }
+
+    uiState.flashcardText?.let { text ->
+        Dialog(onDismissRequest = onDismissFlashcard) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(CoUiTheme.colors.error),
+                contentAlignment = Alignment.Center,
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    CoUiText(
+                        text = text,
+                        style = CoUiTheme.textStyles.displayXS,
+                        color = CoUiTheme.colors.onPrimary,
+                    )
+                    Spacer(Modifier.height(24.dp))
+                    CoUiOutlinedButton(
+                        text = stringResource(R.string.ui_close),
+                        onClick = onDismissFlashcard,
+                        icon = CoUiIconKind.CLOSE,
+                    )
                 }
             }
         }
     }
 }
 
+/** History tab: searchable, filterable list of saved translations with replay/copy/pin actions. */
 @Composable
-private fun DiagnosticsTab(
+private fun HistoryTab(
     uiState: MainUiState,
-    onRefresh: () -> Unit
+    scrollState: ScrollState,
+    onFilterChanged: (String) -> Unit,
+    onReplay: (String, String) -> Unit,
+    onTogglePin: (String) -> Unit,
+    onClear: () -> Unit,
+) {
+    val context = LocalContext.current
+    var query by remember { mutableStateOf("") }
+
+    val filters = listOf(
+        stringResource(R.string.ui_history_all) to "All",
+        stringResource(R.string.ui_history_voice) to "Voice",
+        stringResource(R.string.ui_history_text) to "Text",
+        stringResource(R.string.ui_history_ocr) to "OCR",
+        stringResource(R.string.ui_history_pinned) to "Pinned",
+    )
+    val entries = uiState.chatHistory.filter { entry ->
+        val matchesFilter = when (uiState.historyFilter) {
+            "Pinned" -> entry.pinned
+            "All" -> true
+            else -> entry.source.equals(uiState.historyFilter, ignoreCase = true)
+        }
+        val matchesQuery = query.isBlank() ||
+            entry.input.contains(query, ignoreCase = true) ||
+            entry.output.contains(query, ignoreCase = true)
+        matchesFilter && matchesQuery
+    }
+
+    val copyLabel = stringResource(R.string.ui_copy_label_translation)
+    val copiedToast = stringResource(R.string.ui_copied_translation)
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(scrollState)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        CoUiCard {
+            CoUiSectionTitle(text = stringResource(R.string.ui_history_title))
+            Spacer(Modifier.height(10.dp))
+            CoUiTextField(
+                value = query,
+                onValueChange = { query = it },
+                label = stringResource(R.string.ui_history_search),
+                modifier = Modifier.height(72.dp),
+                singleLine = true,
+            )
+            Spacer(Modifier.height(10.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                filters.forEach { (label, value) ->
+                    CoUiBadge(
+                        text = label,
+                        tone = if (uiState.historyFilter == value) CoUiTone.PRIMARY else CoUiTone.NEUTRAL,
+                        modifier = Modifier.clickable { onFilterChanged(value) },
+                    )
+                }
+            }
+        }
+
+        if (entries.isEmpty()) {
+            CoUiInfoBanner(text = stringResource(R.string.ui_no_history))
+        } else {
+            CoUiCardListGroup(
+                items = entries.map { entry ->
+                    @Composable {
+                        CoUiListRow(
+                            title = entry.source + " • " + entry.targetLang,
+                            summary = entry.output,
+                            endActions = {
+                                CoUiIconButton(
+                                    icon = CoUiIconKind.PLAY,
+                                    contentDescription = stringResource(R.string.ui_replay),
+                                    onClick = { onReplay(entry.output, entry.targetLang) },
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                CoUiIconButton(
+                                    icon = CoUiIconKind.COPY,
+                                    contentDescription = stringResource(R.string.ui_copy),
+                                    onClick = {
+                                        val clipboard =
+                                            context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                        clipboard.setPrimaryClip(ClipData.newPlainText(copyLabel, entry.output))
+                                        Toast.makeText(context, copiedToast, Toast.LENGTH_SHORT).show()
+                                    },
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                CoUiBadge(
+                                    text = stringResource(
+                                        if (entry.pinned) R.string.ui_unpin else R.string.ui_pin,
+                                    ),
+                                    tone = if (entry.pinned) CoUiTone.SUCCESS else CoUiTone.NEUTRAL,
+                                    modifier = Modifier.clickable { onTogglePin(entry.id) },
+                                )
+                            },
+                        )
+                    }
+                },
+            )
+        }
+
+        CoUiOutlinedButton(
+            text = stringResource(R.string.ui_history_clear),
+            onClick = onClear,
+            modifier = Modifier.fillMaxWidth(),
+            icon = CoUiIconKind.CLOSE,
+        )
+
+        uiState.errorMessage?.let { error -> CoUiErrorBanner(message = localizedError(error)) }
+    }
+}
+
+@Composable
+private fun ModelsTab(
+    uiState: MainUiState,
+    scrollState: ScrollState,
+    onRefresh: () -> Unit,
 ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+            .verticalScroll(scrollState)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(14.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
-        ) {
-            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    "Offline AI Engine",
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 14.sp
-                )
-                Text(
-                    "Speech recognition, translation, and neural voices run 100% locally on your phone. No internet connection is needed or used.",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    lineHeight = 17.sp
-                )
-            }
-        }
+        CoUiInfoBanner(text = stringResource(R.string.ui_offline_engine_info))
 
-        Text("Installed Models & Engines:", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-
-        uiState.modelsDiagnostics.forEach { model ->
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
-            ) {
-                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(model.name, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(if (model.isLoaded) Color(0xFF10B981) else Color(0xFF0284C7))
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                        ) {
-                            Text(model.statusText, fontSize = 10.sp, color = Color.White, fontWeight = FontWeight.Bold)
-                        }
+        CoUiSectionTitle(text = stringResource(R.string.ui_engine_readiness))
+        val engines = listOf(
+            stringResource(R.string.ui_engine_whisper) to "Whisper",
+            stringResource(R.string.ui_engine_indictrans) to "IndicTrans",
+            stringResource(R.string.ui_engine_piper) to "Piper",
+            stringResource(R.string.ui_engine_emotion) to "Emotion",
+        )
+        CoUiCardListGroup(
+            items = engines.map { (label, keyword) ->
+                @Composable {
+                    val model = uiState.modelsDiagnostics.firstOrNull {
+                        it.name.contains(keyword, ignoreCase = true)
                     }
-                    Text(
-                        "Category: ${model.category} • Size: ${model.fileSizeBytes / (1024 * 1024)} MB",
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    CoUiListRow(
+                        title = label,
+                        endActions = {
+                            CoUiStatusChip(
+                                text = model?.statusText ?: stringResource(R.string.ui_not_reported),
+                                active = model?.isLoaded == true,
+                            )
+                        },
                     )
                 }
-            }
-        }
-
-        Button(
-            onClick = onRefresh,
-            modifier = Modifier.fillMaxWidth().height(46.dp),
-            shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-        ) {
-            Text("🔄 Refresh Status", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-        }
-    }
-}
-
-@Composable
-fun LanguageSelectorBar(
-    srcLang: SupportedLanguage,
-    tgtLang: SupportedLanguage,
-    onSrcLangSelected: (SupportedLanguage) -> Unit,
-    onTgtLangSelected: (SupportedLanguage) -> Unit,
-    onSwap: () -> Unit,
-    isSpeechMode: Boolean,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            LanguageDropdownButton(
-                selectedLanguage = srcLang,
-                availableLanguages = if (isSpeechMode) SupportedLanguage.speechSourceLanguages else SupportedLanguage.realLanguages,
-                onLanguageSelected = onSrcLangSelected,
-                modifier = Modifier.weight(1f)
-            )
-
-            IconButton(
-                onClick = onSwap,
-                modifier = Modifier.size(36.dp)
-            ) {
-                Text("⇄", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-            }
-
-            LanguageDropdownButton(
-                selectedLanguage = tgtLang,
-                availableLanguages = SupportedLanguage.realLanguages,
-                onLanguageSelected = onTgtLangSelected,
-                modifier = Modifier.weight(1f)
-            )
-        }
-    }
-}
-
-@Composable
-fun LanguageDropdownButton(
-    selectedLanguage: SupportedLanguage,
-    availableLanguages: List<SupportedLanguage>,
-    onLanguageSelected: (SupportedLanguage) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    var expanded by remember { mutableStateOf(false) }
-
-    Box(modifier = modifier) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(10.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                .clickable { expanded = true }
-                .padding(horizontal = 10.dp, vertical = 8.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = selectedLanguage.displayName,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 13.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text("▾", fontSize = 12.sp, color = MaterialTheme.colorScheme.outline)
-            }
-        }
-
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false }
-        ) {
-            availableLanguages.forEach { lang ->
-                DropdownMenuItem(
-                    text = {
-                        Column {
-                            Text(lang.displayName, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                            if (lang.displayName != lang.nativeName) {
-                                Text(lang.nativeName, fontSize = 11.sp, color = MaterialTheme.colorScheme.outline)
-                            }
-                        }
-                    },
-                    onClick = {
-                        onLanguageSelected(lang)
-                        expanded = false
-                    }
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun EmotionBadge(emotion: EmotionResult, modifier: Modifier = Modifier) {
-    val (emoji, bgColor, textColor) = when (emotion.emotion.lowercase()) {
-        "happy" -> Triple("😊", Color(0xFFDCFCE7), Color(0xFF166534))
-        "sad" -> Triple("😔", Color(0xFFE0F2FE), Color(0xFF075985))
-        "angry" -> Triple("😠", Color(0xFFFEE2E2), Color(0xFF991B1B))
-        "fearful" -> Triple("😨", Color(0xFFFEF3C7), Color(0xFF92400E))
-        "surprised" -> Triple("😲", Color(0xFFF3E8FF), Color(0xFF6B21A8))
-        "disgusted" -> Triple("🤢", Color(0xFFF5F5F4), Color(0xFF57534E))
-        "neutral" -> Triple("😐", Color(0xFFF1F5F9), Color(0xFF334155))
-        else -> Triple("🙂", Color(0xFFF1F5F9), Color(0xFF334155))
-    }
-
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(12.dp),
-        color = bgColor,
-        border = BorderStroke(1.dp, textColor.copy(alpha = 0.2f))
-    ) {
-        Text(
-            text = "$emoji ${emotion.emotion.uppercase()} (${(emotion.confidence * 100).toInt()}%)",
-            fontSize = 11.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = textColor,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+            },
         )
-    }
-}
 
-@Composable
-fun AudioWaveformVisualizer(
-    isRecording: Boolean,
-    modifier: Modifier = Modifier
-) {
-    val barCount = 18
-    val staticHeights = listOf(0.25f, 0.45f, 0.70f, 0.35f, 0.85f, 0.60f, 0.95f, 0.50f, 0.75f, 0.40f, 0.90f, 0.65f, 0.30f, 0.80f, 0.55f, 0.70f, 0.35f, 0.20f)
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(32.dp)
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
-            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        for (i in 0 until barCount) {
-            val barHeightFraction = if (isRecording) staticHeights[i % staticHeights.size] else 0.15f
-            val barColor = if (isRecording) Color(0xFFEF4444) else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 2.dp)
-                    .fillMaxHeight(barHeightFraction)
-                    .background(barColor, RoundedCornerShape(2.dp))
+        CoUiSectionTitle(text = stringResource(R.string.ui_installed_models))
+        if (uiState.modelsDiagnostics.isEmpty()) {
+            CoUiInfoBanner(text = stringResource(R.string.ui_no_diagnostics))
+        } else {
+            CoUiCardListGroup(
+                items = uiState.modelsDiagnostics.map { model ->
+                    @Composable {
+                        CoUiListRow(
+                            title = model.name,
+                            summary = stringResource(
+                                R.string.ui_model_info,
+                                model.category,
+                                model.fileSizeBytes / (1024 * 1024),
+                            ),
+                            endActions = {
+                                CoUiStatusChip(
+                                    text = model.statusText.ifBlank {
+                                        stringResource(R.string.ui_status_unavailable)
+                                    },
+                                    active = model.isLoaded,
+                                )
+                            },
+                        )
+                    }
+                },
             )
         }
+
+        CoUiButton(
+            text = stringResource(R.string.ui_refresh_status),
+            onClick = onRefresh,
+            modifier = Modifier.fillMaxWidth(),
+            icon = CoUiIconKind.REFRESH,
+        )
+
+        uiState.errorMessage?.let { error -> CoUiErrorBanner(message = localizedError(error)) }
     }
 }
