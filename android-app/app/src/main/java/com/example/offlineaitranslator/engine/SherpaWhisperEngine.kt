@@ -53,7 +53,7 @@ class SherpaWhisperEngine(
             decoder = decoderFile.absolutePath,
             language = effectiveLang,
             task = "transcribe",
-            tailPaddings = 0
+            tailPaddings = 1
         )
 
         val modelConfig = OfflineModelConfig().apply {

@@ -241,10 +241,8 @@ class SpeechPipelineManager(private val context: Context) : AutoCloseable {
 
         // 2. Resolve Spoken Language (Auto-Detect vs Fixed Language)
         val isAutoDetected = (srcLang == SupportedLanguage.AUTO_DETECT)
-        // Avoid forcing <|hi|> strictly on English/Hinglish speech by allowing open language routing for Hindi/Auto
-        val asrTargetLang = if (isAutoDetected || srcLang == SupportedLanguage.HINDI) "auto" else srcLang.asrCode
 
-        // 3. Run emotion, spoken-language ID and ASR in parallel for lowest latency.
+        // 3. Run emotion and spoken-language ID in parallel for lowest latency.
         val emotionDeferred = async(Dispatchers.Default) {
             try {
                 getEmotionEngine().analyzeEmotion(speechSamples)
@@ -267,6 +265,25 @@ class SpeechPipelineManager(private val context: Context) : AutoCloseable {
             }
         }
 
+        // Await LID before launching ASR so we can pin Whisper's language on top of its own
+        // auto-detection; tiny Whisper misfires most often when the language is unset.
+        val lidResult = try {
+            lidDeferred.await()
+        } catch (t: Throwable) {
+            AppLog.e("Pipeline", "Language ID await error", t)
+            null
+        }
+
+        val asrTargetLang = if (isAutoDetected || srcLang == SupportedLanguage.HINDI) {
+            val fromLid = lidResult?.detectedLanguage
+            when {
+                fromLid != null && fromLid != SupportedLanguage.AUTO_DETECT -> fromLid.asrCode
+                else -> "auto"
+            }
+        } else {
+            srcLang.asrCode
+        }
+
         val asrDeferred = async(Dispatchers.Default) {
             getWhisperEngine().transcribe(
                 samples = speechSamples,
@@ -287,12 +304,6 @@ class SpeechPipelineManager(private val context: Context) : AutoCloseable {
             emotionDeferred.await()
         } catch (t: Throwable) {
             AppLog.e("Pipeline", "Emotion await error", t)
-            null
-        }
-        val lidResult = try {
-            lidDeferred.await()
-        } catch (t: Throwable) {
-            AppLog.e("Pipeline", "Language ID await error", t)
             null
         }
         val transcript = asrResult.text.trim()
